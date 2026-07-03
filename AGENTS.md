@@ -11,8 +11,7 @@
   `state.py`, `paths.py`, `ipc.py`, `logs.py`, `supervisor.py`,
   `client.py`, `broker.py`, `exceptions.py`, and `hookspec.py`.
 - Runtime implementations live under `conda_broker/runtimes/`.
-  `process.py` is the local host-process backend; container modules define
-  adapter boundaries and raise `RuntimeUnavailableError` when unavailable.
+  `process.py` is the local host-process backend.
 
 ## Code style
 
