@@ -14,6 +14,11 @@ else:
 status = service_status("presto")
 ```
 
+`is_service_running()` returns `False` when the named service is not
+discovered, so optional integrations can safely fall back. Use
+`status("service-name")` when you want a strict state query that errors for
+unknown services.
+
 Only explicit startup calls can start the broker:
 
 ```python

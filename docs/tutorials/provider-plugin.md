@@ -3,6 +3,8 @@
 A provider plugin is any installed Python package that publishes
 `conda_broker_services()` under the `conda_broker` entry point group.
 
+![provider plugin demo](../../demos/provider-plugin.gif)
+
 ## Project Metadata
 
 ```toml

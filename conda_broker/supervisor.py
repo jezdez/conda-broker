@@ -91,7 +91,8 @@ class ServiceSupervisor:
 
     def start_enabled_services(self) -> list[ServiceStatus]:
         enabled = self.state.enabled_services()
-        return self.start_services(enabled)
+        known_enabled = [name for name in self.registry.names() if name in enabled]
+        return self.start_services(known_enabled)
 
     def start_services(self, names: Iterable[str] | None = None) -> list[ServiceStatus]:
         targets = list(names) if names is not None else self.registry.names()
@@ -116,16 +117,10 @@ class ServiceSupervisor:
                         raise UnknownServiceError(f"Unknown service: {name}")
                     continue
                 managed.stop_requested = True
-                self._runtime.stop(managed.process, managed.service)
-                try:
-                    managed.process.wait(
-                        timeout=managed.service.merged_process().grace_period_s
-                    )
-                except subprocess.TimeoutExpired:
-                    self._runtime.kill(managed.process)
-                    managed.process.wait(timeout=2)
-                self._close_managed(name, exit_code=managed.process.returncode)
-                self.state.emit("service.stopped", service=name)
+                exit_code = self._stop_managed_process(managed)
+                if managed.process.poll() is not None:
+                    self._close_managed(name, exit_code=exit_code)
+                    self.state.emit("service.stopped", service=name)
             return self.status_many(targets)
 
     def restart_services(
@@ -306,6 +301,21 @@ class ServiceSupervisor:
         )
         if not should_restart:
             return
+        self._schedule_restart(
+            name,
+            managed,
+            reason="exit",
+            data={"exit_code": returncode},
+        )
+
+    def _schedule_restart(
+        self,
+        name: str,
+        managed: ManagedProcess,
+        *,
+        reason: str,
+        data: dict[str, object] | None = None,
+    ) -> None:
         runtime_s = time.monotonic() - managed.started_monotonic
         delay_s = 1.0 if runtime_s >= HEALTHY_BACKOFF_RESET_S else managed.backoff_s
         next_backoff = min(60.0, delay_s * 2)
@@ -318,7 +328,7 @@ class ServiceSupervisor:
         self.state.emit(
             "service.restart_scheduled",
             service=name,
-            data={"delay_s": delay_s},
+            data={"delay_s": delay_s, "reason": reason, **(data or {})},
         )
 
     def _check_managed_health(
@@ -336,8 +346,30 @@ class ServiceSupervisor:
         if healthy or managed.service.restart_policy == "never":
             return
         self.state.emit("service.unhealthy", service=name)
-        managed.stop_requested = False
+        exit_code = self._stop_managed_process(managed)
+        if managed.process.poll() is None:
+            return
+        self._close_managed(name, exit_code=exit_code)
+        self._schedule_restart(
+            name,
+            managed,
+            reason="health",
+            data={"exit_code": exit_code},
+        )
+
+    def _stop_managed_process(self, managed: ManagedProcess) -> int | None:
         self._runtime.stop(managed.process, managed.service)
+        try:
+            managed.process.wait(
+                timeout=managed.service.merged_process().grace_period_s
+            )
+        except subprocess.TimeoutExpired:
+            self._runtime.kill(managed.process)
+            try:
+                managed.process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                return managed.process.poll()
+        return managed.process.returncode
 
     def _health_is_ok(self, managed: ManagedProcess) -> bool:
         check = managed.service.health_check
@@ -363,12 +395,15 @@ class ServiceSupervisor:
             except OSError:
                 return False
         if check.type == "exec":
-            result = subprocess.run(
-                check.command,
-                timeout=check.timeout_s,
-                check=False,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
+            try:
+                result = subprocess.run(
+                    check.command,
+                    timeout=check.timeout_s,
+                    check=False,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except (OSError, subprocess.TimeoutExpired):
+                return False
             return result.returncode == 0
         return False

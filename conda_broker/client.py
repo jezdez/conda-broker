@@ -8,7 +8,7 @@ import sys
 import time
 from typing import TYPE_CHECKING
 
-from .exceptions import BrokerNotRunningError, IpcError
+from .exceptions import BrokerNotRunningError, IpcError, UnknownServiceError
 from .ipc import call, ping
 from .paths import ServicePaths
 from .registry import discover_services
@@ -22,6 +22,12 @@ if TYPE_CHECKING:
 
 def _paths(paths: ServicePaths | None = None) -> ServicePaths:
     return paths or ServicePaths.resolve()
+
+
+def _service_names(services: str | list[str] | tuple[str, ...]) -> list[str]:
+    if isinstance(services, str):
+        return [services]
+    return list(services)
 
 
 def broker_running(paths: ServicePaths | None = None) -> bool:
@@ -87,6 +93,8 @@ def status(
         )
     except BrokerNotRunningError:
         registry = discover_services()
+        if service is not None and service not in registry:
+            raise UnknownServiceError(f"Unknown service: {service}")
         state = StateStore(resolved)
         enabled = state.enabled_services()
         services = [
@@ -110,7 +118,10 @@ def service_status(
     paths: ServicePaths | None = None,
 ) -> dict[str, Any] | None:
     """Return one service status without starting the broker."""
-    payload = status(service, paths=paths)
+    try:
+        payload = status(service, paths=paths)
+    except UnknownServiceError:
+        return None
     services = payload.get("services", [])
     if not services:
         return None
@@ -129,52 +140,55 @@ def is_service_running(
 
 
 def start(
-    services: list[str] | tuple[str, ...] = (),
+    services: str | list[str] | tuple[str, ...] = (),
     *,
     paths: ServicePaths | None = None,
     timeout_s: float = 5.0,
 ) -> dict[str, Any]:
     """Ensure the broker is running, then start selected services."""
     resolved = _paths(paths)
+    names = _service_names(services)
     broker = start_broker(resolved, timeout_s=timeout_s)["broker"]
     result = call(
         resolved.server_file,
         "start_services",
-        {"services": list(services) if services else None},
+        {"services": names if names else None},
     )
     return {"broker": broker, **result}
 
 
 def stop(
-    services: list[str] | tuple[str, ...] = (),
+    services: str | list[str] | tuple[str, ...] = (),
     *,
     paths: ServicePaths | None = None,
 ) -> dict[str, Any]:
     """Stop selected services, or stop the broker when no service is given."""
     resolved = _paths(paths)
-    if services:
+    names = _service_names(services)
+    if names:
         return call(
             resolved.server_file,
             "stop_services",
-            {"services": list(services)},
+            {"services": names},
         )
     return call(resolved.server_file, "shutdown")
 
 
 def restart(
-    services: list[str] | tuple[str, ...] = (),
+    services: str | list[str] | tuple[str, ...] = (),
     *,
     paths: ServicePaths | None = None,
     timeout_s: float = 5.0,
 ) -> dict[str, Any]:
     """Restart selected services, or restart the broker when no service is given."""
     resolved = _paths(paths)
-    if services:
+    names = _service_names(services)
+    if names:
         start_broker(resolved, timeout_s=timeout_s)
         return call(
             resolved.server_file,
             "restart_services",
-            {"services": list(services)},
+            {"services": names},
         )
     if broker_running(resolved):
         stop(paths=resolved)
@@ -198,21 +212,26 @@ def list_services(*, paths: ServicePaths | None = None) -> dict[str, Any]:
 
 
 def set_enabled(
-    services: list[str] | tuple[str, ...],
+    services: str | list[str] | tuple[str, ...],
     enabled: bool,
     *,
     paths: ServicePaths | None = None,
 ) -> dict[str, Any]:
     resolved = _paths(paths)
+    names = _service_names(services)
     if broker_running(resolved):
         return call(
             resolved.server_file,
             "set_enabled",
-            {"services": list(services), "enabled": enabled},
+            {"services": names, "enabled": enabled},
         )
+    registry = discover_services()
+    for service in names:
+        if service not in registry:
+            raise UnknownServiceError(f"Unknown service: {service}")
     state = StateStore(resolved)
-    state.set_enabled(services, enabled)
-    for service in services:
+    state.set_enabled(names, enabled)
+    for service in names:
         state.emit(
             "service.enabled" if enabled else "service.disabled",
             service=service,

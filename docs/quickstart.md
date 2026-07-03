@@ -3,6 +3,8 @@
 This quickstart uses the short `cb` command. The same subcommands are
 available as `conda broker`.
 
+![quickstart demo](../demos/quickstart.gif)
+
 ## Inspect Discovered Services
 
 ```bash

@@ -1,5 +1,7 @@
 # Inspect Logs and Events
 
+![logs and events demo](../../demos/logs-events.gif)
+
 ## Logs
 
 Each service writes stdout and stderr to a service log file:

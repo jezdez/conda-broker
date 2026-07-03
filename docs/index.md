@@ -10,6 +10,8 @@ command: solver APIs, package recommendation workers, telemetry clients,
 local LLM helpers, and other opt-in services that users need to inspect
 and control.
 
+![quickstart demo](../demos/quickstart.gif)
+
 ## Install
 
 ```bash

@@ -111,19 +111,21 @@ class BrokerServer:
                 "enabled": sorted(self.state.enabled_services()),
             }
         if method == "start_services":
-            names = params.get("services")
+            names = _optional_service_names(params.get("services"))
             statuses = self.supervisor.start_services(names)
             return {"services": [status.to_dict() for status in statuses]}
         if method == "stop_services":
-            names = params.get("services")
+            names = _optional_service_names(params.get("services"))
             statuses = self.supervisor.stop_services(names)
             return {"services": [status.to_dict() for status in statuses]}
         if method == "restart_services":
-            names = params.get("services")
+            names = _optional_service_names(params.get("services"))
             statuses = self.supervisor.restart_services(names)
             return {"services": [status.to_dict() for status in statuses]}
         if method == "set_enabled":
-            services = params.get("services") or []
+            services = _service_names(params.get("services") or [])
+            for service in services:
+                self.registry.get(service)
             enabled = bool(params.get("enabled"))
             self.state.set_enabled(services, enabled)
             for service in services:
@@ -246,6 +248,20 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime-dir", type=Path, default=None)
     parser.add_argument("--log-dir", type=Path, default=None)
     return parser
+
+
+def _optional_service_names(value: object) -> list[str] | None:
+    if value is None:
+        return None
+    return _service_names(value)
+
+
+def _service_names(value: object) -> list[str]:
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, list):
+        return [str(item) for item in value]
+    return []
 
 
 def main(args: list[str] | None = None) -> int:

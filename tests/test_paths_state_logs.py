@@ -43,6 +43,16 @@ def test_events_round_trip(service_paths: ServicePaths) -> None:
     assert events == [event.to_dict()]
 
 
+def test_non_positive_event_limit_returns_no_events(
+    service_paths: ServicePaths,
+) -> None:
+    state = StateStore(service_paths)
+    state.emit("plugin.event", service="presto")
+
+    assert state.read_events(limit=0) == []
+    assert state.read_events(limit=-1) == []
+
+
 def test_log_lines(service_paths: ServicePaths) -> None:
     logs = LogManager(service_paths)
     with logs.open_for_service("presto") as stream:
@@ -50,3 +60,14 @@ def test_log_lines(service_paths: ServicePaths) -> None:
         stream.write("two\n")
 
     assert logs.read_lines("presto", lines=1) == ["two"]
+
+
+def test_non_positive_log_line_count_returns_no_lines(
+    service_paths: ServicePaths,
+) -> None:
+    logs = LogManager(service_paths)
+    with logs.open_for_service("presto") as stream:
+        stream.write("one\n")
+
+    assert logs.read_lines("presto", lines=0) == []
+    assert logs.read_lines("presto", lines=-1) == []

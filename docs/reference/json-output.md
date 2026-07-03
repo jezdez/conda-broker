@@ -3,6 +3,8 @@
 Commands that report state support `--json`. JSON output is intended for
 automation and remains separate from Rich human output.
 
+![JSON status demo](../../demos/json-status.gif)
+
 ## Status
 
 ```json

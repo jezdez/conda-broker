@@ -45,6 +45,8 @@ class LogManager:
         lines: int = 50,
         include_previous: bool = False,
     ) -> list[str]:
+        if lines <= 0:
+            return []
         paths = []
         current = self.path_for(service)
         previous = current.with_suffix(".log.1")

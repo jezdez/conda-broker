@@ -37,7 +37,7 @@ Sleep 1s
 Type "# Emit a provider event"
 Enter
 Sleep 500ms
-Type@80ms "python -c \"from conda_broker.client import emit_event; emit_event('demo.note', service='heartbeat', message='operator checked logs')\""
+Type@80ms `python -c 'from conda_broker.client import emit_event; emit_event("demo.note", service="heartbeat", message="operator checked logs")'`
 Enter
 Wait /\$/
 

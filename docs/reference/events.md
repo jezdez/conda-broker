@@ -10,18 +10,23 @@ Events are append-only JSON Lines records with these fields:
 
 ## Broker Events
 
-- `broker.started`
-- `broker.stopped`
+- `broker.started`: broker process is accepting IPC. `data.pid` and
+  `data.port` identify the local broker instance.
+- `broker.stopped`: broker process shut down. `data.pid` identifies the
+  stopped instance.
 
 ## Service Events
 
-- `service.started`
-- `service.stopped`
-- `service.exited`
-- `service.restart_scheduled`
-- `service.unhealthy`
-- `service.enabled`
-- `service.disabled`
+- `service.started`: process launched. `data.pid` is the child PID and
+  `data.restart_count` is the restart generation.
+- `service.stopped`: user-requested stop completed.
+- `service.exited`: process exited without a user stop request.
+  `data.exit_code` records the child return code.
+- `service.restart_scheduled`: restart backoff was scheduled. `data.delay_s`
+  is the wait time and `data.reason` is `exit` or `health`.
+- `service.unhealthy`: a health check failed.
+- `service.enabled`: user enabled the service for broker startup.
+- `service.disabled`: user disabled the service for broker startup.
 
 ## Provider Events
 

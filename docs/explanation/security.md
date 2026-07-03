@@ -6,6 +6,8 @@ The broker is local-first and user-scoped.
 - The auth token is generated per broker process.
 - Connection info is written to a runtime file with restrictive permissions
   where the platform supports it.
+- Clients reject server-file hosts that do not resolve to loopback, so a
+  tampered runtime file cannot redirect broker requests to a remote host.
 - Query helpers do not start the broker as a side effect.
 - Provider plugins must be installed Python packages; discovery uses Python
   entry points.

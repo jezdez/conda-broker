@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 from rich.console import Console
 
 from conda_broker.cli.main import execute_broker, generate_broker_parser
@@ -33,6 +34,22 @@ def test_start_parser_args() -> None:
     assert args.subcmd == "start"
     assert args.services == ["presto"]
     assert args.timeout == 1
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["start", "--timeout", "0"],
+        ["restart", "--timeout", "-1"],
+        ["logs", "presto", "--lines", "0"],
+        ["events", "--lines", "-1"],
+    ],
+)
+def test_parser_rejects_non_positive_numeric_options(argv: list[str]) -> None:
+    parser = generate_broker_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(argv)
 
 
 def test_no_subcommand_prints_help(capsys) -> None:

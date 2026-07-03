@@ -25,6 +25,20 @@ _COMMANDS = {
 }
 
 
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be at least 1")
+    return parsed
+
+
+def _positive_float(value: str) -> float:
+    parsed = float(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("must be greater than 0")
+    return parsed
+
+
 def _add_common_options(
     parser: argparse.ArgumentParser,
     *,
@@ -71,7 +85,7 @@ def configure_broker_parser(parser: argparse.ArgumentParser) -> None:
     start_parser.add_argument("services", nargs="*", help="Services to start.")
     start_parser.add_argument(
         "--timeout",
-        type=float,
+        type=_positive_float,
         default=5.0,
         help="Seconds to wait for broker startup.",
     )
@@ -89,7 +103,7 @@ def configure_broker_parser(parser: argparse.ArgumentParser) -> None:
     restart_parser.add_argument("services", nargs="*", help="Services to restart.")
     restart_parser.add_argument(
         "--timeout",
-        type=float,
+        type=_positive_float,
         default=5.0,
         help="Seconds to wait for broker startup.",
     )
@@ -104,7 +118,7 @@ def configure_broker_parser(parser: argparse.ArgumentParser) -> None:
     logs_parser = sub.add_parser("logs", help="Show service logs.")
     _add_common_options(logs_parser, suppress_defaults=True)
     logs_parser.add_argument("service")
-    logs_parser.add_argument("--lines", type=int, default=50)
+    logs_parser.add_argument("--lines", type=_positive_int, default=50)
     logs_parser.add_argument("--previous", action="store_true", default=False)
     logs_parser.add_argument("--follow", "-f", action="store_true", default=False)
 
@@ -120,7 +134,7 @@ def configure_broker_parser(parser: argparse.ArgumentParser) -> None:
 
     events_parser = sub.add_parser("events", help="Show broker events.")
     _add_common_options(events_parser, suppress_defaults=True)
-    events_parser.add_argument("--lines", type=int, default=50)
+    events_parser.add_argument("--lines", type=_positive_int, default=50)
     events_parser.add_argument("--follow", "-f", action="store_true", default=False)
 
     doctor_parser = sub.add_parser("doctor", help="Check conda-broker setup.")

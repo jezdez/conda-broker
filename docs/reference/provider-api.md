@@ -18,6 +18,19 @@ validated service catalog.
    :members:
 ```
 
+### Health Checks
+
+`HealthCheck` supports four `type` values:
+
+- `process`: child process is still alive.
+- `tcp`: broker can open a TCP connection to `host` and `port`.
+- `http`: broker can fetch `url`; status codes below 500 are healthy.
+- `exec`: command exits with status code zero before `timeout_s`.
+
+Each check runs every `interval_s` seconds while the service is running.
+Failed checks are restart triggers for services with `restart_policy` set to
+`on-failure` or `always`.
+
 ## Registry
 
 ```{eval-rst}

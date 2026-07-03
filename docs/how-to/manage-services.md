@@ -16,6 +16,10 @@ cb enable presto
 cb disable presto
 ```
 
+`enable` and `disable` validate names against discovered services. If a
+provider package is removed later, its stale enabled entry is ignored during
+broker startup instead of preventing other services from starting.
+
 Use `--start` or `--stop` to combine the state change with process action:
 
 ```bash

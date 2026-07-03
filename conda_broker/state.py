@@ -99,6 +99,8 @@ class StateStore:
     ) -> list[dict[str, Any]]:
         if not path.exists():
             return []
+        if limit is not None and limit <= 0:
+            return []
         rows: deque[dict[str, Any]] = deque(maxlen=limit)
         with path.open(encoding="utf-8") as stream:
             for line in stream:

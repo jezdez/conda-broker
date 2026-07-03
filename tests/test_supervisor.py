@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import time
 from typing import TYPE_CHECKING
+
+import pytest
 
 from conda_broker.models import CondaService, HealthCheck, ProcessSpec
 from conda_broker.registry import ServiceRegistry
@@ -202,6 +205,23 @@ def test_supervisor_starts_dependencies(service_paths: ServicePaths) -> None:
         supervisor.stop_services(["app", "dependency"])
 
 
+def test_start_enabled_services_ignores_stale_enabled_entries(
+    service_paths: ServicePaths,
+) -> None:
+    service = _sleeping_service("known")
+    state = StateStore(service_paths)
+    state.set_enabled(["known", "missing"], True)
+    supervisor = ServiceSupervisor(ServiceRegistry([service]), state, service_paths)
+
+    try:
+        statuses = supervisor.start_enabled_services()
+
+        assert [status.name for status in statuses] == ["known"]
+        assert supervisor.is_running("known") is True
+    finally:
+        supervisor.stop_services(["known"])
+
+
 def test_supervisor_health_failure_restarts(
     service_paths: ServicePaths,
     tmp_path: Path,
@@ -255,3 +275,66 @@ def test_supervisor_health_failure_restarts(
         assert status.restart_count == 1
     finally:
         supervisor.stop_services(["unhealthy"])
+
+
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows terminate does not run the Python SIGTERM handler.",
+)
+def test_health_failure_restarts_even_when_stop_exits_cleanly(
+    service_paths: ServicePaths,
+    tmp_path: Path,
+) -> None:
+    marker = tmp_path / "health-marker"
+    health_code = (
+        "import pathlib, sys; "
+        f"p = pathlib.Path({str(marker)!r}); "
+        "ok = p.exists(); "
+        "p.touch(); "
+        "sys.exit(0 if ok else 1)"
+    )
+    service_code = (
+        "import signal, sys, time; "
+        "signal.signal(signal.SIGTERM, lambda *_: sys.exit(0)); "
+        "time.sleep(30)"
+    )
+    service = CondaService(
+        name="clean-health-restart",
+        summary="Health failure restarts after clean stop",
+        source="tests",
+        restart_policy="on-failure",
+        process=ProcessSpec(
+            argv=(sys.executable, "-c", service_code),
+            grace_period_s=1,
+        ),
+        health_check=HealthCheck(
+            type="exec",
+            interval_s=0.01,
+            timeout_s=1,
+            command=(sys.executable, "-c", health_code),
+        ),
+    )
+    state = StateStore(service_paths)
+    supervisor = ServiceSupervisor(ServiceRegistry([service]), state, service_paths)
+
+    try:
+        supervisor.start_services(["clean-health-restart"])
+        supervisor.monitor_once()
+
+        restart_events = [
+            event
+            for event in state.read_events(limit=None)
+            if event["type"] == "service.restart_scheduled"
+        ]
+        assert restart_events
+        assert restart_events[-1]["data"]["reason"] == "health"
+        assert restart_events[-1]["data"]["exit_code"] == 0
+
+        time.sleep(1.1)
+        supervisor.monitor_once()
+
+        status = supervisor.status_many(["clean-health-restart"])[0]
+        assert status.running is True
+        assert status.restart_count == 1
+    finally:
+        supervisor.stop_services(["clean-health-restart"])

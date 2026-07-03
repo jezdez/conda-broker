@@ -9,7 +9,8 @@ from typing import TYPE_CHECKING
 import pytest
 
 from conda_broker.broker import BrokerServer
-from conda_broker.exceptions import IpcAuthError
+from conda_broker.exceptions import IpcAuthError, UnknownServiceError
+from conda_broker.state import StateStore
 
 if TYPE_CHECKING:
     from conda_broker.paths import ServicePaths
@@ -37,6 +38,21 @@ def test_dispatch_status_uses_broker_payload(service_paths: ServicePaths) -> Non
 
     assert payload["broker"] == {"running": True}
     assert payload["services"] == []
+
+
+def test_dispatch_rejects_unknown_service_enable(service_paths: ServicePaths) -> None:
+    broker = BrokerServer(service_paths)
+
+    with pytest.raises(UnknownServiceError):
+        broker.dispatch(
+            {
+                "token": broker.token,
+                "method": "set_enabled",
+                "params": {"services": ["missing"], "enabled": True},
+            }
+        )
+
+    assert StateStore(service_paths).enabled_services() == set()
 
 
 def test_stale_pid_lock_is_recovered(service_paths: ServicePaths) -> None:

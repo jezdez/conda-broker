@@ -6,6 +6,7 @@ import json
 import secrets
 import socket
 from dataclasses import dataclass
+from ipaddress import ip_address
 from typing import TYPE_CHECKING
 
 from .exceptions import BrokerNotRunningError, IpcAuthError, IpcError
@@ -48,12 +49,31 @@ def read_server_info(path: Path) -> ServerInfo:
     if not path.exists():
         raise BrokerNotRunningError("conda-broker broker is not running")
     data = json.loads(path.read_text(encoding="utf-8"))
+    host = str(data["host"])
+    if not _is_loopback_host(host):
+        raise BrokerNotRunningError(
+            "conda-broker broker server file does not point to localhost"
+        )
+    port = int(data["port"])
+    if not 0 < port <= 65535:
+        raise BrokerNotRunningError(
+            "conda-broker broker server file contains an invalid port"
+        )
     return ServerInfo(
-        host=str(data["host"]),
-        port=int(data["port"]),
+        host=host,
+        port=port,
         token=str(data["token"]),
         pid=int(data["pid"]),
     )
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 def call(
