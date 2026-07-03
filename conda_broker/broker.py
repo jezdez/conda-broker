@@ -212,6 +212,8 @@ class BrokerServer:
     def _pid_alive(pid: int) -> bool:
         if pid <= 0:
             return False
+        if os.name == "nt":
+            return _windows_pid_alive(pid)
         try:
             os.kill(pid, 0)
         except OSError:
@@ -251,6 +253,38 @@ def main(args: list[str] | None = None) -> int:
     parsed = parser.parse_args(args)
     paths = ServicePaths.resolve(parsed.runtime_dir, parsed.log_dir)
     return BrokerServer(paths).run()
+
+
+def _windows_pid_alive(pid: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    error_access_denied = 5
+    process_query_limited_information = 0x1000
+    still_active = 259
+
+    kernel32 = getattr(ctypes, "WinDLL")("kernel32", use_last_error=True)
+    open_process = kernel32.OpenProcess
+    open_process.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    open_process.restype = wintypes.HANDLE
+    get_exit_code_process = kernel32.GetExitCodeProcess
+    get_exit_code_process.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    get_exit_code_process.restype = wintypes.BOOL
+    close_handle = kernel32.CloseHandle
+    close_handle.argtypes = [wintypes.HANDLE]
+    close_handle.restype = wintypes.BOOL
+    get_last_error = getattr(ctypes, "get_last_error")
+
+    handle = open_process(process_query_limited_information, False, pid)
+    if not handle:
+        return get_last_error() == error_access_denied
+    try:
+        exit_code = wintypes.DWORD()
+        if not get_exit_code_process(handle, ctypes.byref(exit_code)):
+            return False
+        return exit_code.value == still_active
+    finally:
+        close_handle(handle)
 
 
 if __name__ == "__main__":
