@@ -226,17 +226,17 @@ class BrokerServer:
         return age_s < LOCK_STARTUP_GRACE_S
 
     def _cleanup_files(self) -> None:
-        for path in (self.paths.server_file, self.paths.pid_file, self.paths.lock_file):
-            try:
-                path.unlink()
-            except FileNotFoundError:
-                pass
         if self._lock_fd is not None:
             try:
                 os.close(self._lock_fd)
             except OSError:
                 pass
             self._lock_fd = None
+        for path in (self.paths.server_file, self.paths.pid_file, self.paths.lock_file):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
 
 
 def build_parser() -> argparse.ArgumentParser:

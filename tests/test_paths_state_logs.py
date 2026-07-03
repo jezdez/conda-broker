@@ -3,15 +3,19 @@
 from __future__ import annotations
 
 from conda_broker.logs import LogManager
-from conda_broker.paths import ServicePaths
+from conda_broker.paths import ServicePaths, default_log_dir, default_runtime_dir
 from conda_broker.state import StateStore
 
 
 def test_default_paths_use_conda_broker_namespace() -> None:
     paths = ServicePaths.resolve()
 
-    assert paths.runtime_dir.parts[-2:] == ("conda", "broker")
-    assert paths.log_dir.parts[-2:] == ("conda", "broker")
+    assert paths.runtime_dir == default_runtime_dir()
+    assert paths.log_dir == default_log_dir()
+    assert paths.runtime_dir.name == "broker"
+    assert paths.log_dir.name == "broker"
+    assert "conda" in paths.runtime_dir.parts
+    assert "conda" in paths.log_dir.parts
 
 
 def test_broker_runtime_file_names(service_paths: ServicePaths) -> None:
