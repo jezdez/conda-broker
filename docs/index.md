@@ -89,7 +89,7 @@ How the broker, registry, supervisor, IPC, logs, and provider plugins fit togeth
 
 ```{toctree}
 :hidden:
-:caption: Getting Started
+:caption: Getting started
 
 quickstart
 ```
@@ -98,26 +98,42 @@ quickstart
 :hidden:
 :caption: Tutorials
 
-tutorials/index
+Register your first service <tutorials/first-service>
+Build a provider plugin <tutorials/provider-plugin>
+Create a Presto-style solver service <tutorials/presto-style-service>
 ```
 
 ```{toctree}
 :hidden:
-:caption: How-to Guides
+:caption: How-to guides
 
-how-to/index
+Manage services <how-to/manage-services>
+Query status from plugins <how-to/plugin-status-checks>
+Inspect logs and events <how-to/logs-and-events>
+Configure paths <how-to/paths>
+Configure health checks <how-to/health-checks>
 ```
 
 ```{toctree}
 :hidden:
 :caption: Reference
 
-reference/index
+CLI <reference/cli>
+Provider API <reference/provider-api>
+Client API <reference/client-api>
+JSON output <reference/json-output>
+Events <reference/events>
+Filesystem layout <reference/filesystem>
+Settings <reference/settings>
 ```
 
 ```{toctree}
 :hidden:
 :caption: Explanation
 
-explanation/index
+Architecture <explanation/architecture>
+Process management <explanation/process-management>
+Plugin discovery <explanation/plugin-discovery>
+Security <explanation/security>
+Prior art <explanation/prior-art>
 ```
