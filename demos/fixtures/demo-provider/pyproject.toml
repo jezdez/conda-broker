@@ -1,0 +1,7 @@
+[project]
+name = "conda-broker-demo-provider"
+version = "0.1.0"
+dependencies = ["conda-broker"]
+
+[project.entry-points.conda_broker]
+"demo-provider" = "demo_provider.broker"
