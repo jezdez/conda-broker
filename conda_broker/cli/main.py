@@ -22,6 +22,7 @@ _COMMANDS = {
     "disable": ("conda_broker.cli.services.disable", "execute_disable"),
     "events": ("conda_broker.cli.services.events", "execute_events"),
     "doctor": ("conda_broker.cli.services.doctor", "execute_doctor"),
+    "dev": ("conda_broker.cli.services.dev", "execute_dev"),
 }
 
 
@@ -139,6 +140,80 @@ def configure_broker_parser(parser: argparse.ArgumentParser) -> None:
 
     doctor_parser = sub.add_parser("doctor", help="Check conda-broker setup.")
     _add_common_options(doctor_parser, suppress_defaults=True)
+
+    dev_parser = sub.add_parser(
+        "dev",
+        help="Validate and exercise provider service definitions.",
+    )
+    _add_common_options(dev_parser, suppress_defaults=True)
+    dev_sub = dev_parser.add_subparsers(dest="devcmd", required=True)
+
+    dev_validate = dev_sub.add_parser("validate", help="Validate one service spec.")
+    _add_common_options(dev_validate, suppress_defaults=True)
+    dev_validate.add_argument("service")
+
+    dev_run = dev_sub.add_parser(
+        "run",
+        help="Run one service in an isolated workspace.",
+    )
+    _add_common_options(dev_run, suppress_defaults=True)
+    dev_run.add_argument("service")
+    dev_run.add_argument(
+        "--duration",
+        type=_positive_float,
+        default=3.0,
+        help="Seconds to observe the running service.",
+    )
+    dev_run.add_argument(
+        "--timeout",
+        type=_positive_float,
+        default=5.0,
+        help="Seconds to wait for each lifecycle transition.",
+    )
+    dev_run.add_argument(
+        "--keep",
+        action="store_true",
+        default=False,
+        help="Keep the temporary runtime/log workspace.",
+    )
+
+    dev_test = dev_sub.add_parser("test", help="Run a conformance scenario.")
+    _add_common_options(dev_test, suppress_defaults=True)
+    dev_test.add_argument("service")
+    dev_test.add_argument(
+        "--scenario",
+        choices=["start-stop", "health", "crash"],
+        default="start-stop",
+        help="Scenario to run.",
+    )
+    dev_test.add_argument(
+        "--timeout",
+        type=_positive_float,
+        default=5.0,
+        help="Seconds to wait for each lifecycle transition.",
+    )
+    dev_test.add_argument(
+        "--keep",
+        action="store_true",
+        default=False,
+        help="Keep the temporary runtime/log workspace.",
+    )
+
+    dev_report = dev_sub.add_parser("report", help="Run the full conformance report.")
+    _add_common_options(dev_report, suppress_defaults=True)
+    dev_report.add_argument("service")
+    dev_report.add_argument(
+        "--timeout",
+        type=_positive_float,
+        default=5.0,
+        help="Seconds to wait for each lifecycle transition.",
+    )
+    dev_report.add_argument(
+        "--keep",
+        action="store_true",
+        default=False,
+        help="Keep temporary runtime/log workspaces.",
+    )
 
 
 def execute_broker(

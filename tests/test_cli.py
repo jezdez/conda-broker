@@ -36,6 +36,19 @@ def test_start_parser_args() -> None:
     assert args.timeout == 1
 
 
+def test_dev_parser_args() -> None:
+    parser = generate_broker_parser()
+    args = parser.parse_args(
+        ["dev", "test", "presto", "--scenario", "crash", "--timeout", "2"]
+    )
+
+    assert args.subcmd == "dev"
+    assert args.devcmd == "test"
+    assert args.service == "presto"
+    assert args.scenario == "crash"
+    assert args.timeout == 2
+
+
 @pytest.mark.parametrize(
     "argv",
     [

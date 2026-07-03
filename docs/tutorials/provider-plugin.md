@@ -56,3 +56,18 @@ def solve(request):
 
 Status helpers never start the broker. Use `start()` or `start_broker()`
 only for explicit user-driven startup.
+
+## Validate the Provider Service
+
+Run the conformance harness before relying on the service from another
+plugin:
+
+```bash
+cb dev validate my-provider.api
+cb dev test my-provider.api --scenario health
+cb dev test my-provider.api --scenario crash
+```
+
+Use `cb dev report my-provider.api --json` in CI to catch missing
+commands, unhealthy services, broken stop behavior, and restart-policy
+regressions.

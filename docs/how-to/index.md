@@ -44,4 +44,11 @@ Override runtime and log locations through CLI flags, environment, or conda sett
 Choose process, TCP, HTTP, or exec checks for service health.
 :::
 
+:::{grid-item-card} {octicon}`checklist` Validate provider services
+:link: validate-provider-services
+:link-type: doc
+
+Run isolated conformance checks before shipping a provider plugin.
+:::
+
 ::::

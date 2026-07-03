@@ -62,3 +62,9 @@ automation and remains separate from Rich human output.
 ## Events Follow
 
 `cb events --follow --json` emits one event object per line.
+
+## Development Harness
+
+`cb dev validate`, `cb dev run`, and `cb dev test` return one
+`conformance` object. `cb dev report` returns a report object with a
+`results` list. See [](dev-harness.md) for the full shape.

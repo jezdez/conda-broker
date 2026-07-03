@@ -59,4 +59,11 @@ Runtime files, state files, and log files.
 Conda settings and environment variables.
 :::
 
+:::{grid-item-card} {octicon}`checklist` Development harness
+:link: dev-harness
+:link-type: doc
+
+Conformance scenarios, check statuses, and JSON result shape.
+:::
+
 ::::

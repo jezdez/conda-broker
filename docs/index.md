@@ -114,6 +114,7 @@ Query status from plugins <how-to/plugin-status-checks>
 Inspect logs and events <how-to/logs-and-events>
 Configure paths <how-to/paths>
 Configure health checks <how-to/health-checks>
+Validate provider services <how-to/validate-provider-services>
 ```
 
 ```{toctree}
@@ -127,6 +128,7 @@ JSON output <reference/json-output>
 Events <reference/events>
 Filesystem layout <reference/filesystem>
 Settings <reference/settings>
+Development harness <reference/dev-harness>
 ```
 
 ```{toctree}
