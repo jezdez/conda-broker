@@ -105,6 +105,11 @@ def status(
                 "running": False,
                 "pid": None,
                 "health": "unknown",
+                "ready": False,
+                "endpoints": {
+                    endpoint.name: endpoint.resolve().to_dict()
+                    for endpoint in registered.endpoints
+                },
             }
             for registered in registry.all()
             if service is None or registered.name == service
@@ -139,6 +144,33 @@ def is_service_running(
     return bool(current and current.get("running"))
 
 
+def is_service_ready(
+    service: str,
+    *,
+    paths: ServicePaths | None = None,
+) -> bool:
+    """Return whether *service* is ready, without starting the broker."""
+    current = service_status(service, paths=paths)
+    return bool(current and current.get("ready"))
+
+
+def get_service_endpoint(
+    service: str,
+    endpoint: str = "default",
+    *,
+    paths: ServicePaths | None = None,
+) -> dict[str, Any] | None:
+    """Return one resolved endpoint for *service*, without starting the broker."""
+    current = service_status(service, paths=paths)
+    if not current:
+        return None
+    endpoints = current.get("endpoints")
+    if not isinstance(endpoints, dict):
+        return None
+    value = endpoints.get(endpoint)
+    return value if isinstance(value, dict) else None
+
+
 def start(
     services: str | list[str] | tuple[str, ...] = (),
     *,
@@ -155,6 +187,27 @@ def start(
         {"services": names if names else None},
     )
     return {"broker": broker, **result}
+
+
+def wait(
+    service: str,
+    *,
+    paths: ServicePaths | None = None,
+    timeout_s: float = 30.0,
+    start_service: bool = False,
+) -> dict[str, Any]:
+    """Wait for one service to become ready.
+
+    The broker is only started when ``start_service`` is true.
+    """
+    resolved = _paths(paths)
+    if start_service:
+        start(service, paths=resolved, timeout_s=timeout_s)
+    return call(
+        resolved.server_file,
+        "wait_service",
+        {"service": service, "timeout_s": timeout_s},
+    )
 
 
 def stop(

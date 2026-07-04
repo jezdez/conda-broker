@@ -19,13 +19,29 @@ discovered, so optional integrations can safely fall back. Use
 `status("service-name")` when you want a strict state query that errors for
 unknown services.
 
+For services that expose a local API, check readiness and read the endpoint:
+
+```python
+from conda_broker.client import get_service_endpoint, is_service_ready
+
+if is_service_ready("presto"):
+    endpoint = get_service_endpoint("presto")
+    use_presto(endpoint["url"])
+else:
+    use_inline_solver()
+```
+
+`is_service_ready()` and `get_service_endpoint()` are query helpers. They
+never start the broker.
+
 Only explicit startup calls can start the broker:
 
 ```python
-from conda_broker.client import start, start_broker
+from conda_broker.client import start, start_broker, wait
 
 start_broker()
 start(("presto",))
+wait("presto", start_service=True)
 ```
 
 Use startup calls in user-visible commands, not in hooks that run for every

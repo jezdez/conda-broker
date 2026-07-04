@@ -47,6 +47,7 @@ def conda_broker_services():
             type="exec",
             interval_s=1,
             timeout_s=1,
+            start_period_s=0,
             command=(sys.executable, "-m", "demo_provider.healthcheck"),
         ),
     )

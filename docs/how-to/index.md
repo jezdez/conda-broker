@@ -44,6 +44,13 @@ Override runtime and log locations through CLI flags, environment, or conda sett
 Choose process, TCP, HTTP, or exec checks for service health.
 :::
 
+:::{grid-item-card} {octicon}`plug` Expose service endpoints
+:link: service-endpoints
+:link-type: doc
+
+Declare local TCP or HTTP endpoints, wait for readiness, and query URLs.
+:::
+
 :::{grid-item-card} {octicon}`checklist` Validate provider services
 :link: validate-provider-services
 :link-type: doc

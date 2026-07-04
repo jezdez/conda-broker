@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import shutil
+import socket
 import tempfile
 import time
+import urllib.request
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from ipaddress import ip_address
@@ -297,6 +299,7 @@ def _validate_service(
             )
 
     _validate_health_check(service, result)
+    _validate_endpoints(service, result)
 
 
 def _validate_health_check(service: CondaService, result: ConformanceResult) -> None:
@@ -323,13 +326,71 @@ def _validate_health_check(service: CondaService, result: ConformanceResult) -> 
             grace_period_s=service.merged_process().grace_period_s,
         )
 
+    if check.endpoint:
+        result.add(
+            "pass",
+            "health.endpoint",
+            f"health check uses endpoint {check.endpoint!r}",
+            endpoint=check.endpoint,
+        )
+
     if check.type == "exec":
         _check_command("health.exec.command", check.command, result)
+    elif check.type == "tcp" and check.endpoint:
+        return
     elif check.type == "tcp" and check.host is not None:
         _check_loopback_host("health.tcp.host", check.host, result)
+    elif check.type == "http" and check.endpoint:
+        return
     elif check.type == "http" and check.url is not None:
         host = urlparse(check.url).hostname or ""
         _check_loopback_host("health.http.host", host, result)
+
+
+def _validate_endpoints(service: CondaService, result: ConformanceResult) -> None:
+    if not service.endpoints:
+        result.add("skip", "endpoint.declared", "service declares no endpoints")
+        return
+    for endpoint in service.endpoints:
+        result.add(
+            "pass",
+            "endpoint.declared",
+            f"endpoint {endpoint.name!r} is declared",
+            endpoint=endpoint.name,
+            protocol=endpoint.protocol,
+        )
+        _check_loopback_host(f"endpoint.{endpoint.name}.host", endpoint.host, result)
+        if endpoint.port is None:
+            result.add(
+                "pass",
+                "endpoint.port",
+                "broker will allocate a dynamic port",
+                endpoint=endpoint.name,
+            )
+        else:
+            result.add(
+                "pass",
+                "endpoint.port",
+                "endpoint uses a static port",
+                endpoint=endpoint.name,
+                port=endpoint.port,
+            )
+        if endpoint.port_env:
+            result.add(
+                "pass",
+                "endpoint.port_env",
+                "service receives the endpoint port through a custom env var",
+                endpoint=endpoint.name,
+                env=endpoint.port_env,
+            )
+        if endpoint.url_env:
+            result.add(
+                "pass",
+                "endpoint.url_env",
+                "service receives the endpoint URL through a custom env var",
+                endpoint=endpoint.name,
+                env=endpoint.url_env,
+            )
 
 
 def _check_command(
@@ -389,6 +450,7 @@ def _scenario_start_stop(
 ) -> None:
     state = StateStore(paths)
     supervisor = ServiceSupervisor(registry, state, paths)
+    service = registry.get(service_name)
     stopped = None
     try:
         try:
@@ -405,6 +467,7 @@ def _scenario_start_stop(
         result.status = status.to_dict()
         if status.running:
             result.add("pass", "runtime.start", "service started", pid=status.pid)
+            _check_status_endpoints(status, service, result)
         else:
             result.add(
                 "fail",
@@ -460,6 +523,10 @@ def _scenario_health(
             result.add("fail", "health.observed", "health check did not run")
         else:
             result.add("fail", "health.observed", "health check reported unhealthy")
+        if status.ready:
+            result.add("pass", "readiness.observed", "service reported ready")
+        else:
+            result.add("fail", "readiness.observed", "service was not ready")
     finally:
         try:
             supervisor.stop_services()
@@ -559,10 +626,82 @@ def _start_and_observe(
         status = supervisor.status_many([service_name])[0]
         if status.running and status.health != "unknown":
             return status
-        if not status.running and status.state != "restarting":
+        if not status.running and status.state != "backing-off":
             return status
         time.sleep(0.1)
     return status
+
+
+def _check_status_endpoints(
+    status: ServiceStatus,
+    service: CondaService,
+    result: ConformanceResult,
+) -> None:
+    for endpoint in service.endpoints:
+        data = status.endpoints.get(endpoint.name)
+        if data is None:
+            result.add(
+                "fail",
+                "endpoint.resolved",
+                f"endpoint {endpoint.name!r} was not reported in status",
+                endpoint=endpoint.name,
+            )
+            continue
+        if data.get("port") is None:
+            result.add(
+                "fail",
+                "endpoint.resolved",
+                f"endpoint {endpoint.name!r} has no resolved port",
+                endpoint=endpoint.name,
+            )
+            continue
+        result.add(
+            "pass",
+            "endpoint.resolved",
+            f"endpoint {endpoint.name!r} resolved",
+            endpoint=endpoint.name,
+            url=data.get("url"),
+        )
+        if _endpoint_reachable(data):
+            result.add(
+                "pass",
+                "endpoint.reachable",
+                f"endpoint {endpoint.name!r} accepted a connection",
+                endpoint=endpoint.name,
+                url=data.get("url"),
+            )
+        else:
+            result.add(
+                "fail",
+                "endpoint.reachable",
+                f"endpoint {endpoint.name!r} was not reachable",
+                endpoint=endpoint.name,
+                url=data.get("url"),
+            )
+
+
+def _endpoint_reachable(endpoint: dict[str, object]) -> bool:
+    protocol = endpoint.get("protocol")
+    host = endpoint.get("host")
+    port = endpoint.get("port")
+    if not isinstance(host, str) or not isinstance(port, int):
+        return False
+    if protocol == "tcp":
+        try:
+            with socket.create_connection((host, port), timeout=1):
+                return True
+        except OSError:
+            return False
+    if protocol == "http":
+        url = endpoint.get("url")
+        if not isinstance(url, str):
+            return False
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                return 200 <= response.status < 500
+        except OSError:
+            return False
+    return False
 
 
 def _observe(supervisor: ServiceSupervisor, duration_s: float) -> None:

@@ -11,7 +11,7 @@ from conda_broker.exceptions import (
     UnknownServiceError,
 )
 from conda_broker.hookspec import hookimpl
-from conda_broker.models import CondaService, HealthCheck, ProcessSpec
+from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 from conda_broker.registry import ServiceRegistry
 
 
@@ -31,6 +31,42 @@ def test_process_service_to_dict() -> None:
     assert service.enabled_by_default is True
     assert service.to_dict()["process"]["argv"] == ["conda", "presto", "--serve"]
     assert service.merged_process().env["CONDA_JSON"] == "true"
+
+
+def test_endpoint_service_to_dict() -> None:
+    service = CondaService(
+        name="api",
+        summary="HTTP API",
+        source="tests",
+        process=ProcessSpec(argv=("python", "-m", "http.server")),
+        health_check=HealthCheck(type="http", endpoint="default"),
+        endpoints=(
+            EndpointSpec(
+                protocol="http",
+                path="/health",
+                port_env="PORT",
+                url_env="URL",
+            ),
+        ),
+    )
+
+    endpoint = service.to_dict()["endpoints"][0]
+    assert endpoint["protocol"] == "http"
+    assert endpoint["port"] is None
+    assert service.endpoints[0].resolve(1234).to_dict()["url"] == (
+        "http://127.0.0.1:1234/health"
+    )
+
+
+def test_health_check_rejects_unknown_endpoint() -> None:
+    with pytest.raises(ValueError, match="unknown endpoint"):
+        CondaService(
+            name="bad-health",
+            summary="Bad health",
+            source="tests",
+            process=ProcessSpec(argv=("python", "-V")),
+            health_check=HealthCheck(type="tcp", endpoint="missing"),
+        )
 
 
 @pytest.mark.parametrize(

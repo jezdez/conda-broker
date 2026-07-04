@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from conda_broker.models import CondaService, HealthCheck, ProcessSpec
+from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 from conda_broker.registry import ServiceRegistry
 from conda_broker.state import StateStore
 from conda_broker.supervisor import ServiceSupervisor
@@ -59,6 +59,46 @@ def _flaky_service(
     )
 
 
+def _http_service(name: str) -> CondaService:
+    code = (
+        "import http.server\n"
+        "import os\n"
+        "port = int(os.environ['PORT'])\n"
+        "url = os.environ['URL']\n"
+        "class Handler(http.server.BaseHTTPRequestHandler):\n"
+        "    def do_GET(self):\n"
+        "        self.send_response(200)\n"
+        "        self.end_headers()\n"
+        "        self.wfile.write(b'ok')\n"
+        "    def log_message(self, *args):\n"
+        "        pass\n"
+        "print(f'serving {port} {url}', flush=True)\n"
+        "http.server.ThreadingHTTPServer(\n"
+        "    ('127.0.0.1', port), Handler\n"
+        ").serve_forever()\n"
+    )
+    return CondaService(
+        name=name,
+        summary=f"{name} API",
+        source="tests",
+        process=ProcessSpec(argv=(sys.executable, "-c", code), grace_period_s=1),
+        health_check=HealthCheck(
+            type="http",
+            endpoint="default",
+            interval_s=0.05,
+            timeout_s=1,
+        ),
+        endpoints=(
+            EndpointSpec(
+                protocol="http",
+                path="/health",
+                port_env="PORT",
+                url_env="URL",
+            ),
+        ),
+    )
+
+
 def test_supervisor_start_stop_real_process(service_paths: ServicePaths) -> None:
     service = _sleeping_service("sleeper")
     supervisor = ServiceSupervisor(
@@ -85,6 +125,34 @@ def test_supervisor_start_stop_real_process(service_paths: ServicePaths) -> None
 
     assert statuses[0].running is False
     assert supervisor.is_running("sleeper") is False
+
+
+def test_supervisor_reports_endpoint_readiness(service_paths: ServicePaths) -> None:
+    service = _http_service("api")
+    state = StateStore(service_paths)
+    supervisor = ServiceSupervisor(ServiceRegistry([service]), state, service_paths)
+
+    try:
+        statuses = supervisor.start_services(["api"])
+
+        assert statuses[0].state == "starting"
+        status = supervisor.wait_until_ready("api", timeout_s=3)
+
+        endpoint = status.endpoints["default"]
+        assert status.ready is True
+        assert status.state == "ready"
+        assert status.health == "healthy"
+        assert endpoint["protocol"] == "http"
+        assert endpoint["port"] is not None
+        assert endpoint["url"] == f"http://127.0.0.1:{endpoint['port']}/health"
+        assert supervisor.is_ready("api") is True
+        assert any(
+            event["type"] == "service.started"
+            and "default" in event["data"]["endpoints"]
+            for event in state.read_events(limit=None)
+        )
+    finally:
+        supervisor.stop_services(["api"])
 
 
 def test_supervisor_restarts_failed_process(
@@ -175,7 +243,7 @@ def test_supervisor_always_restarts_clean_exit(
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             supervisor.monitor_once()
-            if supervisor.status_many(["always"])[0].state == "restarting":
+            if supervisor.status_many(["always"])[0].state == "backing-off":
                 break
             time.sleep(0.05)
         time.sleep(1.1)
@@ -246,6 +314,7 @@ def test_supervisor_health_failure_restarts(
             type="exec",
             interval_s=0.01,
             timeout_s=1,
+            start_period_s=0,
             command=(sys.executable, "-c", health_code),
         ),
     )
@@ -264,7 +333,7 @@ def test_supervisor_health_failure_restarts(
         deadline = time.monotonic() + 3
         while time.monotonic() < deadline:
             supervisor.monitor_once()
-            if supervisor.status_many(["unhealthy"])[0].state == "restarting":
+            if supervisor.status_many(["unhealthy"])[0].state == "backing-off":
                 break
             time.sleep(0.05)
         time.sleep(1.1)
@@ -311,6 +380,7 @@ def test_health_failure_restarts_even_when_stop_exits_cleanly(
             type="exec",
             interval_s=0.01,
             timeout_s=1,
+            start_period_s=0,
             command=(sys.executable, "-c", health_code),
         ),
     )

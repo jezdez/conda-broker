@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
     from typing import TextIO
 
-    from .models import CondaService
+    from .models import CondaService, EndpointStatus
     from .paths import ServicePaths
     from .registry import ServiceRegistry
     from .state import StateStore
@@ -39,6 +39,7 @@ class ManagedProcess:
     stop_requested: bool = False
     health: str = "unknown"
     last_health_check: float = 0.0
+    endpoints: dict[str, EndpointStatus] | None = None
 
 
 @dataclass
@@ -141,6 +142,7 @@ class ServiceSupervisor:
             pending = self._pending.get(name)
             if managed is not None:
                 running = managed.process.poll() is None
+                ready = running and managed.health == "healthy"
                 statuses.append(
                     ServiceStatus(
                         name=service.name,
@@ -148,13 +150,17 @@ class ServiceSupervisor:
                         source=service.source,
                         runtime=service.runtime,
                         enabled=service.name in enabled,
-                        state="running" if running else "exited",
+                        state=_state_for(running=running, health=managed.health),
                         running=running,
                         pid=managed.process.pid if running else None,
                         exit_code=managed.process.returncode,
                         started_at=managed.started_at,
                         restart_count=managed.restart_count,
                         health=managed.health,
+                        ready=ready,
+                        endpoints=_endpoint_dict(
+                            managed.endpoints or _unresolved_endpoints(service)
+                        ),
                     )
                 )
             elif pending is not None:
@@ -165,9 +171,10 @@ class ServiceSupervisor:
                         source=service.source,
                         runtime=service.runtime,
                         enabled=service.name in enabled,
-                        state="restarting",
+                        state="backing-off",
                         restart_count=pending.restart_count,
                         health="unknown",
+                        endpoints=_endpoint_dict(_unresolved_endpoints(service)),
                     )
                 )
             else:
@@ -179,6 +186,7 @@ class ServiceSupervisor:
                         runtime=service.runtime,
                         enabled=service.name in enabled,
                         state="stopped",
+                        endpoints=_endpoint_dict(_unresolved_endpoints(service)),
                     )
                 )
         return statuses
@@ -197,6 +205,26 @@ class ServiceSupervisor:
         with self._lock:
             managed = self._managed.get(name)
             return bool(managed and managed.process.poll() is None)
+
+    def is_ready(self, name: str) -> bool:
+        with self._lock:
+            managed = self._managed.get(name)
+            return bool(
+                managed
+                and managed.process.poll() is None
+                and managed.health == "healthy"
+            )
+
+    def wait_until_ready(self, name: str, *, timeout_s: float) -> ServiceStatus:
+        deadline = time.monotonic() + timeout_s
+        status = self.status_many([name])[0]
+        while time.monotonic() < deadline:
+            self.monitor_once()
+            status = self.status_many([name])[0]
+            if status.ready or (not status.running and status.state != "backing-off"):
+                return status
+            time.sleep(0.1)
+        return status
 
     def _start_service(
         self,
@@ -223,9 +251,10 @@ class ServiceSupervisor:
                 visiting=(*visiting, name),
             )
         self._pending.pop(name, None)
+        endpoints, endpoint_env = self._resolve_endpoints(service)
         log_file = self.logs.open_for_service(name)
         try:
-            process = self._runtime.start(service, log_file)
+            process = self._runtime.start(service, log_file, extra_env=endpoint_env)
         except Exception:
             log_file.close()
             raise
@@ -237,12 +266,36 @@ class ServiceSupervisor:
             started_monotonic=time.monotonic(),
             restart_count=restart_count,
             backoff_s=backoff_s,
+            endpoints=endpoints,
         )
         self.state.emit(
             "service.started",
             service=name,
-            data={"pid": process.pid, "restart_count": restart_count},
+            data={
+                "pid": process.pid,
+                "restart_count": restart_count,
+                "endpoints": _endpoint_dict(endpoints),
+            },
         )
+
+    def _resolve_endpoints(
+        self,
+        service: CondaService,
+    ) -> tuple[dict[str, EndpointStatus], dict[str, str]]:
+        endpoints: dict[str, EndpointStatus] = {}
+        env = {"CONDA_BROKER_SERVICE_NAME": service.name}
+        for endpoint in service.endpoints:
+            port = endpoint.port
+            if port is None:
+                port = _allocate_local_port(endpoint.host)
+            resolved = endpoint.resolve(port=port)
+            endpoints[endpoint.name] = resolved
+            env.update(_endpoint_env(endpoint.name, resolved))
+            if endpoint.port_env and resolved.port is not None:
+                env[endpoint.port_env] = str(resolved.port)
+            if endpoint.url_env and resolved.url is not None:
+                env[endpoint.url_env] = resolved.url
+        return endpoints, env
 
     def _close_managed(self, name: str, *, exit_code: int | None) -> None:
         managed = self._managed.pop(name, None)
@@ -342,8 +395,14 @@ class ServiceSupervisor:
             return
         managed.last_health_check = now
         healthy = self._health_is_ok(managed)
-        managed.health = "healthy" if healthy else "unhealthy"
-        if healthy or managed.service.restart_policy == "never":
+        if healthy:
+            managed.health = "healthy"
+            return
+        if now - managed.started_monotonic < check.start_period_s:
+            managed.health = "unknown"
+            return
+        managed.health = "unhealthy"
+        if managed.service.restart_policy == "never":
             return
         self.state.emit("service.unhealthy", service=name)
         exit_code = self._stop_managed_process(managed)
@@ -376,21 +435,26 @@ class ServiceSupervisor:
         if check.type == "process":
             return managed.process.poll() is None
         if check.type == "tcp":
-            if check.host is None or check.port is None:
+            endpoint = _health_endpoint(managed) if check.endpoint else None
+            host = endpoint.host if endpoint else check.host
+            port = endpoint.port if endpoint else check.port
+            if host is None or port is None:
                 return False
             try:
                 with socket.create_connection(
-                    (check.host, check.port),
+                    (host, port),
                     timeout=check.timeout_s,
                 ):
                     return True
             except OSError:
                 return False
         if check.type == "http":
-            if check.url is None:
+            endpoint = _health_endpoint(managed) if check.endpoint else None
+            url = endpoint.url if endpoint else check.url
+            if url is None:
                 return False
             try:
-                with urllib.request.urlopen(check.url, timeout=check.timeout_s) as res:
+                with urllib.request.urlopen(url, timeout=check.timeout_s) as res:
                     return 200 <= res.status < 500
             except OSError:
                 return False
@@ -407,3 +471,49 @@ class ServiceSupervisor:
                 return False
             return result.returncode == 0
         return False
+
+
+def _health_endpoint(managed: ManagedProcess) -> EndpointStatus | None:
+    endpoint_name = managed.service.health_check.endpoint
+    if endpoint_name is None or managed.endpoints is None:
+        return None
+    return managed.endpoints.get(endpoint_name)
+
+
+def _unresolved_endpoints(service: CondaService) -> dict[str, EndpointStatus]:
+    return {endpoint.name: endpoint.resolve() for endpoint in service.endpoints}
+
+
+def _endpoint_dict(
+    endpoints: dict[str, EndpointStatus],
+) -> dict[str, dict[str, object]]:
+    return {name: endpoint.to_dict() for name, endpoint in endpoints.items()}
+
+
+def _state_for(*, running: bool, health: str) -> str:
+    if not running:
+        return "failed"
+    if health == "healthy":
+        return "ready"
+    if health == "unhealthy":
+        return "degraded"
+    return "starting"
+
+
+def _allocate_local_port(host: str) -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((host, 0))
+        return int(sock.getsockname()[1])
+
+
+def _endpoint_env(name: str, endpoint: EndpointStatus) -> dict[str, str]:
+    slug = "".join(char if char.isalnum() else "_" for char in name.upper()).strip("_")
+    if not slug:
+        slug = "DEFAULT"
+    prefix = f"CONDA_BROKER_ENDPOINT_{slug}"
+    env = {f"{prefix}_HOST": endpoint.host, f"{prefix}_PROTOCOL": endpoint.protocol}
+    if endpoint.port is not None:
+        env[f"{prefix}_PORT"] = str(endpoint.port)
+    if endpoint.url is not None:
+        env[f"{prefix}_URL"] = endpoint.url
+    return env

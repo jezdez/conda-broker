@@ -49,11 +49,31 @@ def test_dev_parser_args() -> None:
     assert args.timeout == 2
 
 
+def test_endpoint_parser_args() -> None:
+    parser = generate_broker_parser()
+    args = parser.parse_args(["endpoint", "presto", "api"])
+
+    assert args.subcmd == "endpoint"
+    assert args.service == "presto"
+    assert args.endpoint == "api"
+
+
+def test_wait_parser_args() -> None:
+    parser = generate_broker_parser()
+    args = parser.parse_args(["wait", "presto", "--timeout", "2", "--start"])
+
+    assert args.subcmd == "wait"
+    assert args.service == "presto"
+    assert args.timeout == 2
+    assert args.start is True
+
+
 @pytest.mark.parametrize(
     "argv",
     [
         ["start", "--timeout", "0"],
         ["restart", "--timeout", "-1"],
+        ["wait", "presto", "--timeout", "0"],
         ["logs", "presto", "--lines", "0"],
         ["events", "--lines", "-1"],
     ],
@@ -87,9 +107,20 @@ def test_rich_status_output_uses_broker_term(capsys) -> None:
                     "name": "presto",
                     "state": "stopped",
                     "health": "unknown",
+                    "ready": False,
                     "enabled": True,
                     "pid": None,
                     "restart_count": 0,
+                    "endpoints": {
+                        "default": {
+                            "name": "default",
+                            "protocol": "http",
+                            "host": "127.0.0.1",
+                            "port": 8000,
+                            "path": "/",
+                            "url": "http://127.0.0.1:8000/",
+                        }
+                    },
                     "source": "tests",
                 }
             ],
@@ -100,6 +131,33 @@ def test_rich_status_output_uses_broker_term(capsys) -> None:
     output = capsys.readouterr().out
     assert "conda-broker" in output
     assert "presto" in output
+    assert "http://127.0.0.1:8000/" in output
+
+
+def test_rich_endpoint_output(capsys) -> None:
+    parser = generate_broker_parser()
+    args = parser.parse_args(["endpoint", "presto"])
+
+    emit_payload(
+        args,
+        {
+            "service": "presto",
+            "endpoint_name": "default",
+            "endpoint": {
+                "name": "default",
+                "protocol": "http",
+                "host": "127.0.0.1",
+                "port": 8000,
+                "path": "/health",
+                "url": "http://127.0.0.1:8000/health",
+            },
+            "endpoints": {},
+        },
+    )
+
+    output = capsys.readouterr().out
+    assert "presto" in output
+    assert "http://127.0.0.1:8000/health" in output
 
 
 def test_emit_payload_json_is_parseable(capsys) -> None:

@@ -17,8 +17,9 @@ Events are append-only JSON Lines records with these fields:
 
 ## Service Events
 
-- `service.started`: process launched. `data.pid` is the child PID and
-  `data.restart_count` is the restart generation.
+- `service.started`: process launched. `data.pid` is the child PID,
+  `data.restart_count` is the restart generation, and `data.endpoints`
+  contains resolved endpoint metadata for declared endpoints.
 - `service.stopped`: user-requested stop completed.
 - `service.exited`: process exited without a user stop request.
   `data.exit_code` records the child return code.

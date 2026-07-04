@@ -29,9 +29,15 @@ def _signal_number(name: str) -> int:
 class ProcessRuntime:
     """Start and stop services as local child processes."""
 
-    def start(self, service: CondaService, log_file: TextIO) -> subprocess.Popen[str]:
+    def start(
+        self,
+        service: CondaService,
+        log_file: TextIO,
+        *,
+        extra_env: Mapping[str, str] | None = None,
+    ) -> subprocess.Popen[str]:
         spec = service.merged_process()
-        env: Mapping[str, str] = {**os.environ, **spec.env}
+        env: Mapping[str, str] = {**os.environ, **spec.env, **(extra_env or {})}
         if os.name != "nt":
             return subprocess.Popen(
                 spec.argv,

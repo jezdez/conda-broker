@@ -17,6 +17,8 @@ _COMMANDS = {
     "restart": ("conda_broker.cli.services.restart", "execute_restart"),
     "status": ("conda_broker.cli.services.status", "execute_status"),
     "list": ("conda_broker.cli.services.list", "execute_list"),
+    "endpoint": ("conda_broker.cli.services.endpoint", "execute_endpoint"),
+    "wait": ("conda_broker.cli.services.wait", "execute_wait"),
     "logs": ("conda_broker.cli.services.logs", "execute_logs"),
     "enable": ("conda_broker.cli.services.enable", "execute_enable"),
     "disable": ("conda_broker.cli.services.disable", "execute_disable"),
@@ -115,6 +117,27 @@ def configure_broker_parser(parser: argparse.ArgumentParser) -> None:
 
     list_parser = sub.add_parser("list", help="List discovered services.")
     _add_common_options(list_parser, suppress_defaults=True)
+
+    endpoint_parser = sub.add_parser("endpoint", help="Show service endpoints.")
+    _add_common_options(endpoint_parser, suppress_defaults=True)
+    endpoint_parser.add_argument("service")
+    endpoint_parser.add_argument("endpoint", nargs="?", default="default")
+
+    wait_parser = sub.add_parser("wait", help="Wait for a service to become ready.")
+    _add_common_options(wait_parser, suppress_defaults=True)
+    wait_parser.add_argument("service")
+    wait_parser.add_argument(
+        "--timeout",
+        type=_positive_float,
+        default=30.0,
+        help="Seconds to wait for service readiness.",
+    )
+    wait_parser.add_argument(
+        "--start",
+        action="store_true",
+        default=False,
+        help="Start the broker and service before waiting.",
+    )
 
     logs_parser = sub.add_parser("logs", help="Show service logs.")
     _add_common_options(logs_parser, suppress_defaults=True)

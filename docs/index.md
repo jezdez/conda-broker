@@ -114,6 +114,7 @@ Query status from plugins <how-to/plugin-status-checks>
 Inspect logs and events <how-to/logs-and-events>
 Configure paths <how-to/paths>
 Configure health checks <how-to/health-checks>
+Expose service endpoints <how-to/service-endpoints>
 Validate provider services <how-to/validate-provider-services>
 ```
 

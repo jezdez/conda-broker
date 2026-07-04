@@ -50,10 +50,21 @@ Single-result commands return:
     ],
     "status": {
       "name": "my-provider.api",
-      "state": "running",
+      "state": "ready",
       "running": true,
       "health": "healthy",
-      "restart_count": 0
+      "ready": true,
+      "restart_count": 0,
+      "endpoints": {
+        "default": {
+          "name": "default",
+          "protocol": "http",
+          "host": "127.0.0.1",
+          "port": 8765,
+          "path": "/health",
+          "url": "http://127.0.0.1:8765/health"
+        }
+      }
     },
     "events": [],
     "logs": []
@@ -74,3 +85,6 @@ Single-result commands return:
 
 Each result in `results` has the same shape as the single-result
 `conformance` object.
+
+Endpoint-aware services get additional checks such as
+`endpoint.declared`, `endpoint.resolved`, and `endpoint.reachable`.

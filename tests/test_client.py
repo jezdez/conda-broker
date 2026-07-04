@@ -8,7 +8,7 @@ import pytest
 
 from conda_broker import client
 from conda_broker.exceptions import UnknownServiceError
-from conda_broker.models import CondaService, ProcessSpec
+from conda_broker.models import CondaService, EndpointSpec, ProcessSpec
 from conda_broker.registry import ServiceRegistry
 
 if TYPE_CHECKING:
@@ -32,6 +32,39 @@ def test_is_service_running_does_not_start_broker(
     monkeypatch.setattr(client, "discover_services", lambda: registry)
 
     assert client.is_service_running("presto", paths=service_paths) is False
+    assert not service_paths.server_file.exists()
+    assert not service_paths.pid_file.exists()
+
+
+def test_service_ready_and_endpoint_helpers_do_not_start_broker(
+    monkeypatch,
+    service_paths: ServicePaths,
+) -> None:
+    registry = ServiceRegistry(
+        [
+            CondaService(
+                name="api",
+                summary="API service",
+                source="tests",
+                process=ProcessSpec(argv=("python", "-V")),
+                endpoints=(
+                    EndpointSpec(
+                        protocol="http",
+                        host="127.0.0.1",
+                        port=8765,
+                        path="/health",
+                    ),
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr(client, "discover_services", lambda: registry)
+
+    endpoint = client.get_service_endpoint("api", paths=service_paths)
+
+    assert client.is_service_ready("api", paths=service_paths) is False
+    assert endpoint is not None
+    assert endpoint["url"] == "http://127.0.0.1:8765/health"
     assert not service_paths.server_file.exists()
     assert not service_paths.pid_file.exists()
 

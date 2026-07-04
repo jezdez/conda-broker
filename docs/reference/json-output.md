@@ -20,13 +20,24 @@ automation and remains separate from Rich human output.
       "source": "conda-presto",
       "runtime": "process",
       "enabled": true,
-      "state": "running",
+      "state": "ready",
       "running": true,
       "pid": 12345,
       "exit_code": null,
       "started_at": "2026-07-03T12:00:00+00:00",
       "restart_count": 0,
-      "health": "healthy"
+      "health": "healthy",
+      "ready": true,
+      "endpoints": {
+        "default": {
+          "name": "default",
+          "protocol": "http",
+          "host": "127.0.0.1",
+          "port": 17654,
+          "path": "/health",
+          "url": "http://127.0.0.1:17654/health"
+        }
+      }
     }
   ]
 }
@@ -43,12 +54,57 @@ automation and remains separate from Rich human output.
       "source": "conda-presto",
       "runtime": "process",
       "start_policy": "manual",
-      "restart_policy": "on-failure"
+      "restart_policy": "on-failure",
+      "endpoints": [
+        {
+          "name": "default",
+          "protocol": "http",
+          "host": "127.0.0.1",
+          "port": 17654,
+          "path": "/health",
+          "port_env": null,
+          "url_env": null
+        }
+      ]
     }
   ],
   "enabled": ["presto"]
 }
 ```
+
+## Endpoint
+
+```json
+{
+  "service": "presto",
+  "endpoint_name": "default",
+  "endpoint": {
+    "name": "default",
+    "protocol": "http",
+    "host": "127.0.0.1",
+    "port": 17654,
+    "path": "/health",
+    "url": "http://127.0.0.1:17654/health"
+  },
+  "endpoints": {
+    "default": {
+      "name": "default",
+      "protocol": "http",
+      "host": "127.0.0.1",
+      "port": 17654,
+      "path": "/health",
+      "url": "http://127.0.0.1:17654/health"
+    }
+  },
+  "ready": true
+}
+```
+
+## Wait
+
+`cb wait SERVICE --json` returns the same `services` status envelope as
+`cb status SERVICE`. The command exits zero only when the first service in
+the envelope has `ready: true`.
 
 ## Logs Follow
 

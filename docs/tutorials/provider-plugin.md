@@ -20,7 +20,7 @@ dependencies = ["conda-broker"]
 
 ```python
 from conda_broker.hookspec import hookimpl
-from conda_broker.models import CondaService, HealthCheck, ProcessSpec
+from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 
 
 @hookimpl
@@ -31,9 +31,17 @@ def conda_broker_services():
         source="conda-my-provider",
         start_policy="manual",
         restart_policy="on-failure",
-        health_check=HealthCheck(type="tcp", host="127.0.0.1", port=8765),
+        endpoints=(
+            EndpointSpec(
+                protocol="http",
+                path="/health",
+                port_env="PORT",
+                url_env="SERVICE_URL",
+            ),
+        ),
+        health_check=HealthCheck(type="http", endpoint="default"),
         process=ProcessSpec(
-            argv=("python", "-m", "conda_my_provider.server", "--port", "8765"),
+            argv=("python", "-m", "conda_my_provider.server"),
             env={"PYTHONUNBUFFERED": "1"},
             grace_period_s=10,
         ),
@@ -45,17 +53,19 @@ def conda_broker_services():
 Provider code can decide whether to use the long-running path:
 
 ```python
-from conda_broker.client import is_service_running
+from conda_broker.client import get_service_endpoint, is_service_ready
 
 
 def solve(request):
-    if is_service_running("my-provider.api"):
-        return solve_with_local_api(request)
+    if is_service_ready("my-provider.api"):
+        endpoint = get_service_endpoint("my-provider.api")
+        return solve_with_local_api(request, endpoint["url"])
     return solve_inline(request)
 ```
 
-Status helpers never start the broker. Use `start()` or `start_broker()`
-only for explicit user-driven startup.
+Readiness and endpoint helpers never start the broker. Use `start()`,
+`start_broker()`, or `wait(..., start_service=True)` only for explicit
+user-driven startup.
 
 ## Validate the Provider Service
 

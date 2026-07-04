@@ -16,6 +16,7 @@ START_POLICIES = {"manual", "enabled"}
 RESTART_POLICIES = {"never", "on-failure", "always"}
 RUNTIMES = {"process"}
 HEALTH_CHECK_TYPES = {"process", "tcp", "http", "exec"}
+ENDPOINT_PROTOCOLS = {"tcp", "http"}
 
 
 def utc_now() -> str:
@@ -39,6 +40,8 @@ class HealthCheck:
     type: str = "process"
     interval_s: float = 30.0
     timeout_s: float = 5.0
+    start_period_s: float = 5.0
+    endpoint: str | None = None
     command: tuple[str, ...] = ()
     host: str | None = None
     port: int | None = None
@@ -52,9 +55,17 @@ class HealthCheck:
             raise ValueError("Health check interval must be positive")
         if self.timeout_s <= 0:
             raise ValueError("Health check timeout must be positive")
-        if self.type == "tcp" and (not self.host or not self.port):
+        if self.start_period_s < 0:
+            raise ValueError("Health check start period must not be negative")
+        if self.endpoint is not None:
+            validate_service_name(self.endpoint)
+        if (
+            self.type == "tcp"
+            and not self.endpoint
+            and (not self.host or not self.port)
+        ):
             raise ValueError("TCP health checks require host and port")
-        if self.type == "http" and not self.url:
+        if self.type == "http" and not self.endpoint and not self.url:
             raise ValueError("HTTP health checks require url")
         if self.type == "exec" and not self.command:
             raise ValueError("Exec health checks require command")
@@ -64,11 +75,95 @@ class HealthCheck:
             "type": self.type,
             "interval_s": self.interval_s,
             "timeout_s": self.timeout_s,
+            "start_period_s": self.start_period_s,
+            "endpoint": self.endpoint,
             "command": list(self.command),
             "host": self.host,
             "port": self.port,
             "url": self.url,
         }
+
+
+@dataclass(frozen=True)
+class EndpointSpec:
+    """Network endpoint contract exposed by a service."""
+
+    name: str = "default"
+    protocol: str = "tcp"
+    host: str = "127.0.0.1"
+    port: int | None = None
+    path: str = "/"
+    port_env: str | None = None
+    url_env: str | None = None
+
+    def __post_init__(self) -> None:
+        validate_service_name(self.name)
+        if self.protocol not in ENDPOINT_PROTOCOLS:
+            raise ValueError(f"Unknown endpoint protocol: {self.protocol}")
+        if not self.host:
+            raise ValueError("Endpoint host must not be empty")
+        if self.port is not None and not 0 < self.port < 65536:
+            raise ValueError("Endpoint port must be between 1 and 65535")
+        if self.protocol == "http" and not self.path.startswith("/"):
+            raise ValueError("HTTP endpoint paths must start with '/'")
+
+    @property
+    def needs_port_allocation(self) -> bool:
+        return self.port is None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "protocol": self.protocol,
+            "host": self.host,
+            "port": self.port,
+            "path": self.path,
+            "port_env": self.port_env,
+            "url_env": self.url_env,
+        }
+
+    def resolve(self, port: int | None = None) -> EndpointStatus:
+        resolved_port = self.port if self.port is not None else port
+        url = None
+        if resolved_port is not None:
+            url = endpoint_url(self.protocol, self.host, resolved_port, self.path)
+        return EndpointStatus(
+            name=self.name,
+            protocol=self.protocol,
+            host=self.host,
+            port=resolved_port,
+            path=self.path,
+            url=url,
+        )
+
+
+@dataclass(frozen=True)
+class EndpointStatus:
+    """Resolved endpoint state reported for a service."""
+
+    name: str
+    protocol: str
+    host: str
+    port: int | None = None
+    path: str = "/"
+    url: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "protocol": self.protocol,
+            "host": self.host,
+            "port": self.port,
+            "path": self.path,
+            "url": self.url,
+        }
+
+
+def endpoint_url(protocol: str, host: str, port: int, path: str = "/") -> str:
+    """Return a client URL for an endpoint."""
+    if protocol == "http":
+        return f"http://{host}:{port}{path}"
+    return f"{protocol}://{host}:{port}"
 
 
 @dataclass(frozen=True)
@@ -115,6 +210,7 @@ class CondaService:
     start_policy: str = "manual"
     restart_policy: str = "on-failure"
     health_check: HealthCheck = field(default_factory=HealthCheck)
+    endpoints: tuple[EndpointSpec, ...] = ()
     dependencies: tuple[str, ...] = ()
     env: dict[str, str] = field(default_factory=dict)
     cwd: str | None = None
@@ -122,6 +218,7 @@ class CondaService:
     def __post_init__(self) -> None:
         validate_service_name(self.name)
         object.__setattr__(self, "dependencies", tuple(self.dependencies))
+        object.__setattr__(self, "endpoints", tuple(self.endpoints))
         object.__setattr__(
             self,
             "env",
@@ -135,6 +232,17 @@ class CondaService:
             raise ValueError(f"Unknown restart policy: {self.restart_policy}")
         for dependency in self.dependencies:
             validate_service_name(dependency)
+        endpoint_names = [endpoint.name for endpoint in self.endpoints]
+        if len(endpoint_names) != len(set(endpoint_names)):
+            raise ValueError("Service endpoints must have unique names")
+        if (
+            self.health_check.endpoint
+            and self.health_check.endpoint not in endpoint_names
+        ):
+            raise ValueError(
+                "Health check references unknown endpoint: "
+                f"{self.health_check.endpoint}"
+            )
         if self.runtime == "process" and self.process is None:
             raise ValueError("'process' services require process")
 
@@ -165,6 +273,7 @@ class CondaService:
             "start_policy": self.start_policy,
             "restart_policy": self.restart_policy,
             "health_check": self.health_check.to_dict(),
+            "endpoints": [endpoint.to_dict() for endpoint in self.endpoints],
             "dependencies": list(self.dependencies),
             "env": dict(self.env),
             "cwd": self.cwd,
@@ -188,6 +297,8 @@ class ServiceStatus:
     started_at: str | None = None
     restart_count: int = 0
     health: str = "unknown"
+    ready: bool = False
+    endpoints: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -203,6 +314,8 @@ class ServiceStatus:
             "started_at": self.started_at,
             "restart_count": self.restart_count,
             "health": self.health,
+            "ready": self.ready,
+            "endpoints": dict(self.endpoints),
         }
 
 

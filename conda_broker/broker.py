@@ -105,6 +105,26 @@ class BrokerServer:
             return {"status": "ok"}
         if method == "status":
             return self.supervisor.status(params.get("service"))
+        if method == "wait_service":
+            service = str(params.get("service", ""))
+            timeout_s = float(params.get("timeout_s", 30.0))
+            status = self.supervisor.wait_until_ready(service, timeout_s=timeout_s)
+            return {"services": [status.to_dict()]}
+        if method == "endpoint":
+            service = str(params.get("service", ""))
+            endpoint = str(params.get("endpoint", "default"))
+            status = self.supervisor.status_many([service])[0].to_dict()
+            endpoints = status.get("endpoints")
+            selected = None
+            if isinstance(endpoints, dict):
+                value = endpoints.get(endpoint)
+                if isinstance(value, dict):
+                    selected = value
+            return {
+                "service": service,
+                "endpoint": selected,
+                "endpoints": endpoints if isinstance(endpoints, dict) else {},
+            }
         if method == "list_services":
             return {
                 "services": [service.to_dict() for service in self.registry.all()],

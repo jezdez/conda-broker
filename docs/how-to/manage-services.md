@@ -39,6 +39,26 @@ cb stop
 `cb start` starts the broker and enabled services. `cb stop` without names
 shuts the broker down.
 
+## Wait for Readiness
+
+```bash
+cb wait presto --timeout 15
+cb wait presto --start --timeout 15
+```
+
+`cb wait` exits successfully only when the service reports `ready=true`.
+Use `--start` when startup itself should be part of the user-visible action.
+
+## Show Endpoints
+
+```bash
+cb endpoint presto
+cb endpoint presto default --json
+```
+
+Endpoint output shows the resolved URL for services that declare local TCP or
+HTTP endpoints.
+
 ## Restart
 
 ```bash
