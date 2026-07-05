@@ -23,6 +23,13 @@ List, enable, start, restart, and stop broker-managed services.
 Use the `Broker` API to make runtime decisions without starting the broker.
 :::
 
+:::{grid-item-card} {octicon}`plug` Integrate conda plugins
+:link: integrate-conda-plugins
+:link-type: doc
+
+Add optional broker services, fallbacks, and plugin-specific status checks.
+:::
+
 :::{grid-item-card} {octicon}`log` Inspect logs and events
 :link: logs-and-events
 :link-type: doc

@@ -8,7 +8,7 @@ import pytest
 
 import conda_broker.api as broker_api
 from conda_broker import Broker, BrokerState, Service, StatusSnapshot
-from conda_broker.exceptions import UnknownServiceError
+from conda_broker.exceptions import IpcError, UnknownServiceError
 from conda_broker.models import CondaService, EndpointSpec, ProcessSpec, ServiceStatus
 from conda_broker.registry import ServiceRegistry
 
@@ -107,6 +107,72 @@ def test_unknown_service_handle_returns_false(
 
     assert service.status() is None
     assert service.running() is False
+
+
+def test_service_check_reports_known_offline_service(
+    monkeypatch,
+    service_paths: ServicePaths,
+) -> None:
+    registry = ServiceRegistry(
+        [
+            CondaService(
+                name="api",
+                summary="API service",
+                source="tests",
+                process=ProcessSpec(argv=("python", "-V")),
+                endpoints=(
+                    EndpointSpec(
+                        protocol="http",
+                        host="127.0.0.1",
+                        port=8765,
+                        path="/health",
+                    ),
+                ),
+            )
+        ]
+    )
+    monkeypatch.setattr(broker_api, "discover_services", lambda: registry)
+
+    check = Broker.current(service_paths).service("api").check()
+
+    assert check.available is True
+    assert check.running is False
+    assert check.ready is False
+    assert check.state == "stopped"
+    assert check.reason == "stopped"
+    assert check.endpoint is not None
+    assert check.endpoint.url == "http://127.0.0.1:8765/health"
+    assert check.to_dict()["endpoint"]["url"] == "http://127.0.0.1:8765/health"
+    assert not service_paths.server_file.exists()
+    assert not service_paths.pid_file.exists()
+
+
+def test_service_check_reports_unknown_service(
+    monkeypatch,
+    service_paths: ServicePaths,
+) -> None:
+    monkeypatch.setattr(broker_api, "discover_services", ServiceRegistry)
+
+    check = Broker.current(service_paths).service("missing").check()
+
+    assert check.available is False
+    assert check.reason == "unknown-service"
+    assert check.to_dict()["running"] is False
+
+
+def test_service_check_reports_broker_unavailable(
+    monkeypatch,
+    service_paths: ServicePaths,
+) -> None:
+    def raise_ipc(self: Broker, service: str | None = None) -> StatusSnapshot:
+        raise IpcError("bad response")
+
+    monkeypatch.setattr(Broker, "status", raise_ipc)
+
+    check = Broker.current(service_paths).service("api").check()
+
+    assert check.available is False
+    assert check.reason == "broker-unavailable"
 
 
 def test_set_enabled_unknown_service_offline_raises(

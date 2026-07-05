@@ -7,17 +7,30 @@ methods do not start the broker.
 from conda_broker import Broker
 
 service = Broker.current().service("package-cache")
+check = service.check()
 
-if service.running():
+if check.ready:
     query_local_metadata()
 else:
     query_repodata_directly()
 
-status = service.status()
+status = check.status
 ```
 
-`Service.status()` returns `None` when the named service is not discovered,
-so optional integrations can safely fall back. Use
+`Service.check()` returns a compact report for plugin CLIs and JSON output.
+It distinguishes a discovered but stopped service from an unknown service:
+
+```python
+check = Broker.current().service("package-cache").check()
+
+if check.available:
+    print(check.to_dict())
+else:
+    use_inline_fallback(reason=check.reason)
+```
+
+`Service.status()` returns `None` when the named service is not discovered or
+unavailable, so optional integrations can safely fall back. Use
 `Broker.current().status("service-name")` when you want a strict state query
 that errors for unknown services.
 

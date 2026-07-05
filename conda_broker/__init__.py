@@ -7,6 +7,7 @@ from .api import (
     BrokerContext,
     BrokerState,
     Service,
+    ServiceCheck,
     ServiceContext,
     StatusSnapshot,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "BrokerContext",
     "BrokerState",
     "Service",
+    "ServiceCheck",
     "ServiceContext",
     "StatusSnapshot",
     "__version__",

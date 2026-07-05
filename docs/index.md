@@ -111,6 +111,7 @@ Create a package cache service <tutorials/package-cache-service>
 
 Manage services <how-to/manage-services>
 Query status from plugins <how-to/plugin-status-checks>
+Integrate conda plugins <how-to/integrate-conda-plugins>
 Inspect logs and events <how-to/logs-and-events>
 Configure paths <how-to/paths>
 Configure health checks <how-to/health-checks>

@@ -85,6 +85,35 @@ class StatusSnapshot:
 
 
 @dataclass(frozen=True)
+class ServiceCheck:
+    """Compact status report for plugin CLIs and optional integrations."""
+
+    name: str
+    available: bool
+    running: bool = False
+    ready: bool = False
+    enabled: bool = False
+    state: str = "unknown"
+    health: str = "unknown"
+    endpoint: EndpointStatus | None = None
+    reason: str | None = None
+    status: ServiceStatus | None = field(default=None, repr=False, compare=False)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "available": self.available,
+            "running": self.running,
+            "ready": self.ready,
+            "enabled": self.enabled,
+            "state": self.state,
+            "health": self.health,
+            "endpoint": self.endpoint.to_dict() if self.endpoint else None,
+            "reason": self.reason,
+        }
+
+
+@dataclass(frozen=True)
 class Broker:
     """Client for the current user's conda-broker process."""
 
@@ -258,6 +287,48 @@ class Service:
         except (BrokerNotRunningError, IpcError, UnknownServiceError):
             return None
         return snapshot.services[0] if snapshot.services else None
+
+    def check(self, endpoint: str = "default") -> ServiceCheck:
+        """Return a compact service report without starting the broker.
+
+        This is intended for plugin ``status`` or ``doctor`` commands that want
+        stable JSON and human output without reimplementing broker-state logic.
+        """
+        try:
+            snapshot = self.broker.status(self.name)
+        except UnknownServiceError:
+            return ServiceCheck(
+                name=self.name,
+                available=False,
+                reason="unknown-service",
+            )
+        except (BrokerNotRunningError, IpcError):
+            return ServiceCheck(
+                name=self.name,
+                available=False,
+                reason="broker-unavailable",
+            )
+        if not snapshot.services:
+            return ServiceCheck(
+                name=self.name,
+                available=False,
+                reason="unknown-service",
+            )
+
+        status = snapshot.services[0]
+        reason = None if status.ready else status.state
+        return ServiceCheck(
+            name=self.name,
+            available=True,
+            running=status.running,
+            ready=status.ready,
+            enabled=status.enabled,
+            state=status.state,
+            health=status.health,
+            endpoint=status.endpoint(endpoint),
+            reason=reason,
+            status=status,
+        )
 
     def running(self) -> bool:
         """Return whether the service process is running."""

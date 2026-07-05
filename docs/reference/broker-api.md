@@ -8,6 +8,7 @@ Query methods do not start the broker:
 - `Broker.current()`
 - `Broker.running()`
 - `Broker.status()`
+- `Broker.service(NAME).check()`
 - `Broker.service(NAME).status()`
 - `Broker.service(NAME).running()`
 - `Broker.service(NAME).ready()`
@@ -46,6 +47,16 @@ with Broker.current().service("package-cache").started(wait=True) as service:
 `started()` context managers clean up only what they started. If the broker
 or service was already running before entering the `with` block, it is left
 running on exit.
+
+Plugin status commands can render a compact service report without starting
+anything:
+
+```python
+from conda_broker import Broker
+
+check = Broker.current().service("package-cache").check()
+print(check.to_dict())
+```
 
 ```{eval-rst}
 .. automodule:: conda_broker.api

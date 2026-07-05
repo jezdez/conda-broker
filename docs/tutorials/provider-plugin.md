@@ -58,8 +58,10 @@ from conda_broker import Broker
 
 def solve(request):
     service = Broker.current().service("my-provider.api")
-    if endpoint := service.endpoint(ready=True):
-        return solve_with_local_api(request, endpoint.url)
+    check = service.check()
+    if check.ready and check.endpoint and check.endpoint.url:
+        return solve_with_local_api(request, check.endpoint.url)
+    log_fallback(check.reason)
     return solve_inline(request)
 ```
 
