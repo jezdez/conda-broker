@@ -27,6 +27,26 @@ Startup methods are explicit:
 `Broker.service(NAME).wait(start=False)` waits on an already running broker
 and does not start a process by itself.
 
+Context managers are explicit lifecycle helpers:
+
+```python
+from conda_broker import Broker
+
+with Broker.current().started() as broker:
+    print(broker.status().to_dict())
+```
+
+```python
+from conda_broker import Broker
+
+with Broker.current().service("package-cache").started(wait=True) as service:
+    endpoint = service.endpoint(ready=True)
+```
+
+`started()` context managers clean up only what they started. If the broker
+or service was already running before entering the `with` block, it is left
+running on exit.
+
 ```{eval-rst}
 .. automodule:: conda_broker.api
    :members:

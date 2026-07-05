@@ -39,6 +39,26 @@ cb stop
 `cb start` starts the broker and enabled services. `cb stop` without names
 shuts the broker down.
 
+For Python scripts that need temporary lifecycle ownership, use the `Broker`
+API context managers:
+
+```python
+from conda_broker import Broker
+
+with Broker.current().started() as broker:
+    broker.service("package-cache").start()
+```
+
+```python
+from conda_broker import Broker
+
+with Broker.current().service("package-cache").started(wait=True) as service:
+    endpoint = service.endpoint(ready=True)
+```
+
+Context managers leave pre-existing brokers and services running. They stop
+only the broker or service they started on entry.
+
 ## Wait for Readiness
 
 ```bash

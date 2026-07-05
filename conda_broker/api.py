@@ -105,6 +105,23 @@ class Broker:
             _start_broker_payload(self.paths, timeout_s=timeout_s)["broker"]
         )
 
+    def started(
+        self,
+        *,
+        timeout_s: float = 5.0,
+        stop_timeout_s: float = 5.0,
+    ) -> BrokerContext:
+        """Return a context manager that keeps the broker running.
+
+        The context manager stops the broker on exit only when it started the
+        broker on entry.
+        """
+        return BrokerContext(
+            self,
+            timeout_s=timeout_s,
+            stop_timeout_s=stop_timeout_s,
+        )
+
     def stop(self) -> dict[str, Any]:
         """Stop the broker process."""
         return call(self.paths.server_file, "shutdown")
@@ -275,6 +292,28 @@ class Service:
         """Start this service, starting the broker first if needed."""
         return self.broker.start_services(self.name, timeout_s=timeout_s)
 
+    def started(
+        self,
+        *,
+        timeout_s: float = 5.0,
+        wait: bool = False,
+        wait_timeout_s: float = 30.0,
+        stop_timeout_s: float = 5.0,
+    ) -> ServiceContext:
+        """Return a context manager that keeps this service running.
+
+        The context manager stops the service on exit only when it started the
+        service on entry. If starting the service also started the broker, the
+        broker is stopped on exit as well.
+        """
+        return ServiceContext(
+            self,
+            timeout_s=timeout_s,
+            wait=wait,
+            wait_timeout_s=wait_timeout_s,
+            stop_timeout_s=stop_timeout_s,
+        )
+
     def stop(self) -> StatusSnapshot:
         """Stop this service."""
         return self.broker.stop_services(self.name)
@@ -318,6 +357,73 @@ class Service:
             message=message,
             data=data,
         )
+
+
+@dataclass
+class BrokerContext:
+    """Context manager returned by ``Broker.started()``."""
+
+    broker: Broker
+    timeout_s: float = 5.0
+    stop_timeout_s: float = 5.0
+    _started_broker: bool = False
+
+    def __enter__(self) -> Broker:
+        self._started_broker = not self.broker.running()
+        try:
+            self.broker.start(timeout_s=self.timeout_s)
+        except Exception:
+            if self._started_broker and self.broker.running():
+                self.broker.stop()
+                _wait_until_stopped(self.broker, timeout_s=self.stop_timeout_s)
+            raise
+        return self.broker
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._started_broker and self.broker.running():
+            self.broker.stop()
+            _wait_until_stopped(self.broker, timeout_s=self.stop_timeout_s)
+
+
+@dataclass
+class ServiceContext:
+    """Context manager returned by ``Service.started()``."""
+
+    service: Service
+    timeout_s: float = 5.0
+    wait: bool = False
+    wait_timeout_s: float = 30.0
+    stop_timeout_s: float = 5.0
+    _started_broker: bool = False
+    _started_service: bool = False
+
+    def __enter__(self) -> Service:
+        self._started_broker = not self.service.broker.running()
+        status = self.service.status()
+        self._started_service = not (status and status.running)
+        try:
+            self.service.start(timeout_s=self.timeout_s)
+            if self.wait:
+                self.service.wait(timeout_s=self.wait_timeout_s)
+        except Exception:
+            self._cleanup()
+            raise
+        return self.service
+
+    def __exit__(self, *exc_info: object) -> None:
+        self._cleanup()
+
+    def _cleanup(self) -> None:
+        try:
+            if self._started_service:
+                self.service.stop()
+        finally:
+            if self._started_broker and self.service.broker.running():
+                self.service.broker.stop()
+                _wait_until_stopped(
+                    self.service.broker,
+                    timeout_s=self.stop_timeout_s,
+                )
 
 
 def _paths(paths: ServicePaths | None = None) -> ServicePaths:
@@ -483,3 +589,9 @@ def _emit_event(
         message=message,
         data=data,
     )
+
+
+def _wait_until_stopped(broker: Broker, *, timeout_s: float) -> None:
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline and broker.running():
+        time.sleep(0.1)

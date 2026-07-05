@@ -48,5 +48,20 @@ broker.service("package-cache").start()
 broker.service("package-cache").wait(start=True)
 ```
 
+For scripts that need a temporary service and want automatic cleanup, use a
+context manager:
+
+```python
+from conda_broker import Broker
+
+with Broker.current().service("package-cache").started(wait=True) as service:
+    if endpoint := service.endpoint(ready=True):
+        query_local_metadata(endpoint.url)
+```
+
+The context manager stops the service on exit only when it started the
+service on entry. If it had to start the broker too, it stops that broker on
+exit as well.
+
 Use startup calls in user-visible commands, not in hooks that run for every
 conda invocation.
