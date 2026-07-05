@@ -53,19 +53,19 @@ def conda_broker_services():
 Provider code can decide whether to use the long-running path:
 
 ```python
-from conda_broker.client import get_service_endpoint, is_service_ready
+from conda_broker import Broker
 
 
 def solve(request):
-    if is_service_ready("my-provider.api"):
-        endpoint = get_service_endpoint("my-provider.api")
-        return solve_with_local_api(request, endpoint["url"])
+    service = Broker.current().service("my-provider.api")
+    if endpoint := service.endpoint(ready=True):
+        return solve_with_local_api(request, endpoint.url)
     return solve_inline(request)
 ```
 
-Readiness and endpoint helpers never start the broker. Use `start()`,
-`start_broker()`, or `wait(..., start_service=True)` only for explicit
-user-driven startup.
+Readiness and endpoint queries never start the broker. Use
+`Broker.start()`, `service.start()`, or `service.wait(start=True)` only for
+explicit user-driven startup.
 
 ## Validate the Provider Service
 

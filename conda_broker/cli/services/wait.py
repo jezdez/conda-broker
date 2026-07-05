@@ -2,16 +2,16 @@
 
 from __future__ import annotations
 
-from ... import client
+from ... import Broker
 from .common import emit_payload, paths_from_args
 
 
 def execute_wait(args, *, console=None) -> int:
-    payload = client.wait(
-        args.service,
-        paths=paths_from_args(args),
-        timeout_s=args.timeout,
-        start_service=args.start,
+    payload = (
+        Broker.current(paths_from_args(args))
+        .service(args.service)
+        .wait(timeout_s=args.timeout, start=args.start)
+        .to_dict()
     )
     emit_payload(args, payload, console=console)
     services = payload.get("services")

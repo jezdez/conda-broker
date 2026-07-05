@@ -105,14 +105,15 @@ the service starts.
 Runtime decisions should use query helpers. They do not start the broker.
 
 ```python
-from conda_broker.client import get_service_endpoint, is_service_ready
+from conda_broker import Broker
 
-if is_service_ready("my-provider.api"):
-    endpoint = get_service_endpoint("my-provider.api")
-    use_api(endpoint["url"])
+service = Broker.current().service("my-provider.api")
+
+if endpoint := service.endpoint(ready=True):
+    use_api(endpoint.url)
 else:
     use_inline_fallback()
 ```
 
-Use `wait(..., start_service=True)` only from user-visible commands where
+Use `service.wait(start=True)` only from user-visible commands where
 starting the broker and service is an explicit action.

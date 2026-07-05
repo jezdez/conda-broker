@@ -3,7 +3,7 @@
 `conda-broker` is a conda plugin and short `cb` command for supervising
 long-running conda-adjacent services. It provides a user-visible broker
 process, a private pluggy provider API, local process supervision, logs,
-events, health checks, and a small client API for other plugins.
+events, health checks, and a small `Broker` API for other plugins.
 
 Use it for tools that should not restart from scratch on every conda
 command: package metadata caches, package recommendation workers,
@@ -124,7 +124,7 @@ Validate provider services <how-to/validate-provider-services>
 
 CLI <reference/cli>
 Provider API <reference/provider-api>
-Client API <reference/client-api>
+Broker API <reference/broker-api>
 JSON output <reference/json-output>
 Events <reference/events>
 Filesystem layout <reference/filesystem>

@@ -25,9 +25,9 @@ flowchart LR
     Broker --> Events["events.jsonl"]
 ```
 
-The broker does not start during arbitrary conda invocations. Query helpers
+The broker does not start during arbitrary conda invocations. Query methods
 can read state and ask a running broker for status, but startup is reserved
-for explicit commands and explicit client API calls.
+for explicit commands and explicit `Broker` API calls.
 
 Endpoint resolution happens immediately before process launch. Static ports
 are reported as-is. Dynamic endpoints get a broker-assigned local port and

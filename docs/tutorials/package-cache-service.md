@@ -51,14 +51,15 @@ cb endpoint package-cache
 ```
 
 If a conda plugin wants to use the service opportunistically, it should use
-the client API:
+the `Broker` API:
 
 ```python
-from conda_broker.client import get_service_endpoint, is_service_ready
+from conda_broker import Broker
 
-if is_service_ready("package-cache"):
-    endpoint = get_service_endpoint("package-cache")
-    query_local_metadata(endpoint["url"], "numpy")
+service = Broker.current().service("package-cache")
+
+if endpoint := service.endpoint(ready=True):
+    query_local_metadata(endpoint.url, "numpy")
 else:
     query_repodata_directly("numpy")
 ```

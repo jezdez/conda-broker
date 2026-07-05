@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from ... import client
+from ... import Broker
 from ...registry import discover_services
 from .common import emit_payload, paths_from_args
 
@@ -18,7 +18,7 @@ def execute_doctor(args, *, console=None) -> int:
         "runtime_dir_writable": os.access(paths.runtime_dir, os.W_OK),
         "log_dir": str(paths.log_dir),
         "log_dir_writable": os.access(paths.log_dir, os.W_OK),
-        "broker_running": client.broker_running(paths),
+        "broker_running": Broker.current(paths).running(),
         "services_discovered": len(registry.all()),
     }
     payload = {"doctor": checks}

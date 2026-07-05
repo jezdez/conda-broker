@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
-from ... import client
+from ... import Broker
 from .common import emit_payload, paths_from_args
 
 
 def execute_stop(args, *, console=None) -> int:
-    payload = client.stop(tuple(args.services), paths=paths_from_args(args))
+    broker = Broker.current(paths_from_args(args))
+    if args.services:
+        payload = broker.stop_services(tuple(args.services)).to_dict()
+    else:
+        payload = broker.stop()
     emit_payload(args, payload, console=console)
     return 0

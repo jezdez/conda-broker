@@ -41,7 +41,10 @@ cb events --follow --json
 Provider plugins can record events without starting the broker:
 
 ```python
-from conda_broker.client import emit_event
+from conda_broker import Broker
 
-emit_event("package_cache.warmed", service="package-cache", message="ready")
+Broker.current().service("package-cache").emit_event(
+    "package_cache.warmed",
+    message="ready",
+)
 ```

@@ -24,11 +24,11 @@ Generated command-line reference for `cb` and `conda broker`.
 Service models, hookspecs, and registry behavior.
 :::
 
-:::{grid-item-card} {octicon}`code` Client API
-:link: client-api
+:::{grid-item-card} {octicon}`code` Broker API
+:link: broker-api
 :link-type: doc
 
-Helpers for status checks, service actions, and event emission.
+Objects for status checks, service actions, and event emission.
 :::
 
 :::{grid-item-card} {octicon}`file-code` JSON output

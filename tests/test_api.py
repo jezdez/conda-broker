@@ -1,4 +1,4 @@
-"""Tests for provider-facing client helpers."""
+"""Tests for provider-facing broker API helpers."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from conda_broker import client
+import conda_broker.api as broker_api
+from conda_broker import Broker
 from conda_broker.exceptions import UnknownServiceError
 from conda_broker.models import CondaService, EndpointSpec, ProcessSpec
 from conda_broker.registry import ServiceRegistry
@@ -15,7 +16,7 @@ if TYPE_CHECKING:
     from conda_broker.paths import ServicePaths
 
 
-def test_is_service_running_does_not_start_broker(
+def test_running_query_does_not_start_broker(
     monkeypatch,
     service_paths: ServicePaths,
 ) -> None:
@@ -29,14 +30,16 @@ def test_is_service_running_does_not_start_broker(
             )
         ]
     )
-    monkeypatch.setattr(client, "discover_services", lambda: registry)
+    monkeypatch.setattr(broker_api, "discover_services", lambda: registry)
 
-    assert client.is_service_running("package-cache", paths=service_paths) is False
+    service = Broker.current(service_paths).service("package-cache")
+
+    assert service.running() is False
     assert not service_paths.server_file.exists()
     assert not service_paths.pid_file.exists()
 
 
-def test_service_ready_and_endpoint_helpers_do_not_start_broker(
+def test_ready_and_endpoint_queries_do_not_start_broker(
     monkeypatch,
     service_paths: ServicePaths,
 ) -> None:
@@ -58,13 +61,15 @@ def test_service_ready_and_endpoint_helpers_do_not_start_broker(
             )
         ]
     )
-    monkeypatch.setattr(client, "discover_services", lambda: registry)
+    monkeypatch.setattr(broker_api, "discover_services", lambda: registry)
 
-    endpoint = client.get_service_endpoint("api", paths=service_paths)
+    service = Broker.current(service_paths).service("api")
+    endpoint = service.endpoint()
 
-    assert client.is_service_ready("api", paths=service_paths) is False
+    assert service.ready() is False
     assert endpoint is not None
-    assert endpoint["url"] == "http://127.0.0.1:8765/health"
+    assert endpoint.url == "http://127.0.0.1:8765/health"
+    assert service.endpoint(ready=True) is None
     assert not service_paths.server_file.exists()
     assert not service_paths.pid_file.exists()
 
@@ -72,11 +77,10 @@ def test_service_ready_and_endpoint_helpers_do_not_start_broker(
 def test_emit_event_without_broker_writes_local_event(
     service_paths: ServicePaths,
 ) -> None:
-    event = client.emit_event(
-        "plugin.event",
-        service="package-cache",
-        message="offline",
-        paths=service_paths,
+    event = (
+        Broker.current(service_paths)
+        .service("package-cache")
+        .emit_event("plugin.event", message="offline")
     )
 
     assert event.to_dict()["message"] == "offline"
@@ -87,29 +91,31 @@ def test_status_unknown_service_offline_raises(
     monkeypatch,
     service_paths: ServicePaths,
 ) -> None:
-    monkeypatch.setattr(client, "discover_services", ServiceRegistry)
+    monkeypatch.setattr(broker_api, "discover_services", ServiceRegistry)
 
     with pytest.raises(UnknownServiceError):
-        client.status("missing", paths=service_paths)
+        Broker.current(service_paths).status("missing")
 
 
-def test_is_service_running_unknown_service_returns_false(
+def test_unknown_service_handle_returns_false(
     monkeypatch,
     service_paths: ServicePaths,
 ) -> None:
-    monkeypatch.setattr(client, "discover_services", ServiceRegistry)
+    monkeypatch.setattr(broker_api, "discover_services", ServiceRegistry)
 
-    assert client.service_status("missing", paths=service_paths) is None
-    assert client.is_service_running("missing", paths=service_paths) is False
+    service = Broker.current(service_paths).service("missing")
+
+    assert service.status() is None
+    assert service.running() is False
 
 
 def test_set_enabled_unknown_service_offline_raises(
     monkeypatch,
     service_paths: ServicePaths,
 ) -> None:
-    monkeypatch.setattr(client, "discover_services", ServiceRegistry)
+    monkeypatch.setattr(broker_api, "discover_services", ServiceRegistry)
 
     with pytest.raises(UnknownServiceError):
-        client.set_enabled("missing", True, paths=service_paths)
+        Broker.current(service_paths).set_enabled("missing", True)
 
     assert not service_paths.enabled_file.exists()

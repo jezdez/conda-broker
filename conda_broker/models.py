@@ -148,6 +148,24 @@ class EndpointStatus:
     path: str = "/"
     url: str | None = None
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> EndpointStatus:
+        """Build an endpoint status from a JSON payload."""
+        port_value = data.get("port")
+        try:
+            port = int(port_value) if port_value is not None else None
+        except (TypeError, ValueError):
+            port = None
+        url_value = data.get("url")
+        return cls(
+            name=str(data.get("name", "default")),
+            protocol=str(data.get("protocol", "tcp")),
+            host=str(data.get("host", "127.0.0.1")),
+            port=port,
+            path=str(data.get("path", "/")),
+            url=str(url_value) if url_value is not None else None,
+        )
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
@@ -300,6 +318,41 @@ class ServiceStatus:
     ready: bool = False
     endpoints: dict[str, dict[str, Any]] = field(default_factory=dict)
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ServiceStatus:
+        """Build a service status from a JSON payload."""
+        endpoints = data.get("endpoints")
+        endpoint_data = {
+            str(name): dict(endpoint)
+            for name, endpoint in (
+                endpoints.items() if isinstance(endpoints, dict) else ()
+            )
+            if isinstance(endpoint, dict)
+        }
+        return cls(
+            name=str(data.get("name", "")),
+            summary=str(data.get("summary", "")),
+            source=str(data.get("source", "")),
+            runtime=str(data.get("runtime", "")),
+            enabled=bool(data.get("enabled", False)),
+            state=str(data.get("state", "unknown")),
+            running=bool(data.get("running", False)),
+            pid=_optional_int(data.get("pid")),
+            exit_code=_optional_int(data.get("exit_code")),
+            started_at=_optional_str(data.get("started_at")),
+            restart_count=int(data.get("restart_count") or 0),
+            health=str(data.get("health", "unknown")),
+            ready=bool(data.get("ready", False)),
+            endpoints=endpoint_data,
+        )
+
+    def endpoint(self, name: str = "default") -> EndpointStatus | None:
+        """Return one typed endpoint status by name."""
+        data = self.endpoints.get(name)
+        if data is None:
+            return None
+        return EndpointStatus.from_dict(data)
+
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
@@ -317,6 +370,19 @@ class ServiceStatus:
             "ready": self.ready,
             "endpoints": dict(self.endpoints),
         }
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_str(value: object) -> str | None:
+    return str(value) if value is not None else None
 
 
 @dataclass(frozen=True)

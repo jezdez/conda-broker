@@ -20,7 +20,7 @@ List, enable, start, restart, and stop broker-managed services.
 :link: plugin-status-checks
 :link-type: doc
 
-Use the client API to make runtime decisions without starting the broker.
+Use the `Broker` API to make runtime decisions without starting the broker.
 :::
 
 :::{grid-item-card} {octicon}`log` Inspect logs and events

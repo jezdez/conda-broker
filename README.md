@@ -9,7 +9,7 @@ It provides:
 - a local user-scoped broker process
 - process supervision with restart policies, health checks, logs, and events
 - a private pluggy broker-provider API owned by this package
-- a lightweight client API for other plugins to check service state without
+- a lightweight `Broker` API for other plugins to check service state without
   starting the broker
 
 ## Provider API
@@ -42,10 +42,10 @@ Register the provider module under:
 Plugins can make runtime decisions without starting the broker:
 
 ```python
-from conda_broker.client import is_service_running
+from conda_broker import Broker
 
-if is_service_running("package-cache"):
-    ...
+if endpoint := Broker.current().service("package-cache").endpoint(ready=True):
+    use_package_cache(endpoint.url)
 ```
 
 ## Development

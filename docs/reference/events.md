@@ -34,9 +34,10 @@ Events are append-only JSON Lines records with these fields:
 Providers can emit any namespaced event type:
 
 ```python
-emit_event(
+from conda_broker import Broker
+
+Broker.current().service("package-cache").emit_event(
     "package_cache.warmed",
-    service="package-cache",
     message="repodata cache is ready",
     data={"records": 425000},
 )

@@ -5,20 +5,20 @@ from __future__ import annotations
 import json
 import time
 
-from ... import client
+from ... import Broker
 from .common import emit_payload, paths_from_args, print_event_line
 
 
 def execute_events(args, *, console=None) -> int:
-    paths = paths_from_args(args)
+    broker = Broker.current(paths_from_args(args))
     if not args.follow:
-        payload = client.events(paths=paths, limit=args.lines)
+        payload = broker.events(limit=args.lines)
         emit_payload(args, payload, console=console)
         return 0
 
     seen = 0
     while True:
-        payload = client.events(paths=paths)
+        payload = broker.events()
         events = payload.get("events", [])
         if isinstance(events, list):
             for event in events[seen:]:
