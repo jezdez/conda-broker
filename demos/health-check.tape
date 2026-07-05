@@ -25,11 +25,6 @@ Type@80ms "cb start healthcheck"
 Enter
 Wait /\$/
 Sleep 3s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# The failed check restarts the service"
 Enter
@@ -38,11 +33,6 @@ Type@80ms "cb status healthcheck"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Events record the health failure and restart"
 Enter
@@ -51,11 +41,6 @@ Type@80ms "cb events --lines 8"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Logs continue after restart"
 Enter

@@ -25,11 +25,6 @@ Type@80ms "cb start heartbeat"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Broker status as JSON"
 Enter
@@ -38,11 +33,6 @@ Type@80ms "cb status --json"
 Enter
 Wait /\$/
 Sleep 2s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Query one service"
 Enter

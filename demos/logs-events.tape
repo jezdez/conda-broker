@@ -25,11 +25,6 @@ Type@80ms "cb start heartbeat"
 Enter
 Wait /\$/
 Sleep 2s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Read the service log"
 Enter
@@ -38,11 +33,6 @@ Type@80ms "cb logs heartbeat --lines 5"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Emit a provider event"
 Enter
@@ -50,11 +40,6 @@ Sleep 500ms
 Type@80ms `python -c 'from conda_broker.client import emit_event; emit_event("demo.note", service="heartbeat", message="operator checked logs")'`
 Enter
 Wait /\$/
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Inspect recent events"
 Enter

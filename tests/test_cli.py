@@ -134,6 +134,35 @@ def test_rich_status_output_uses_broker_term(capsys) -> None:
     assert "http://127.0.0.1:8000/" in output
 
 
+def test_rich_service_output_omits_empty_endpoint_column(capsys) -> None:
+    parser = generate_broker_parser()
+    args = parser.parse_args(["start", "presto"])
+
+    emit_payload(
+        args,
+        {
+            "broker": {"running": True, "started": True},
+            "services": [
+                {
+                    "name": "presto",
+                    "state": "starting",
+                    "health": "unknown",
+                    "ready": False,
+                    "enabled": False,
+                    "pid": 123,
+                    "restart_count": 0,
+                    "endpoints": {},
+                    "source": "tests",
+                }
+            ],
+        },
+    )
+
+    output = capsys.readouterr().out
+    assert "conda-broker: running (started yes)" in output
+    assert "Endpoint" not in output
+
+
 def test_rich_endpoint_output(capsys) -> None:
     parser = generate_broker_parser()
     args = parser.parse_args(["endpoint", "presto"])

@@ -25,11 +25,6 @@ Type@80ms "cb list"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Enable and start a service"
 Enter
@@ -38,11 +33,6 @@ Type@80ms "cb enable heartbeat --start"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Inspect service readiness"
 Enter
@@ -51,11 +41,6 @@ Type@80ms "cb status heartbeat"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Read recent logs"
 Enter
@@ -64,11 +49,6 @@ Type@80ms "cb logs heartbeat --lines 3"
 Enter
 Wait /\$/
 Sleep 1s
-Hide
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Stop the broker"
 Enter

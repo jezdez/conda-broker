@@ -42,13 +42,15 @@ def emit_payload(
 def print_human(payload: dict[str, Any], *, console: Console | None = None) -> None:
     resolved_console = console_or_default(console)
     broker = payload.get("broker")
-    if isinstance(broker, dict):
-        _print_broker(resolved_console, broker)
-
     services = payload.get("services")
     if isinstance(services, list):
+        if isinstance(broker, dict):
+            _print_broker_summary(resolved_console, broker)
         _print_services(resolved_console, services)
         return
+
+    if isinstance(broker, dict):
+        _print_broker(resolved_console, broker)
 
     enabled = payload.get("enabled")
     if isinstance(enabled, list):
@@ -102,10 +104,29 @@ def _print_broker(console: Console, broker: dict[str, Any]) -> None:
     console.print(table)
 
 
+def _print_broker_summary(console: Console, broker: dict[str, Any]) -> None:
+    state = "running" if broker.get("running") else "stopped"
+    started = broker.get("started")
+    if started is True:
+        detail = "started yes"
+    elif started is False:
+        detail = "started no"
+    else:
+        detail = "started -"
+    console.print(f"[bold]conda-broker[/bold]: {escape(state)} ({escape(detail)})")
+
+
 def _print_services(console: Console, services: list[Any]) -> None:
     if not services:
         console.print("services: none")
         return
+    endpoint_summaries = [
+        _endpoint_summary(service.get("endpoints"))
+        if isinstance(service, dict)
+        else "-"
+        for service in services
+    ]
+    show_endpoint = any(summary != "-" for summary in endpoint_summaries)
     table = Table(show_edge=False, pad_edge=False)
     table.add_column("Service", style="bold")
     table.add_column("State")
@@ -114,12 +135,13 @@ def _print_services(console: Console, services: list[Any]) -> None:
     table.add_column("Enabled")
     table.add_column("PID", justify="right")
     table.add_column("Restarts", justify="right")
-    table.add_column("Endpoint")
+    if show_endpoint:
+        table.add_column("Endpoint")
     table.add_column("Source")
-    for service in services:
+    for service, endpoint_summary in zip(services, endpoint_summaries, strict=False):
         if not isinstance(service, dict):
             continue
-        table.add_row(
+        row = [
             escape(str(service.get("name", ""))),
             escape(str(service.get("state", "unknown"))),
             escape(str(service.get("health", "unknown"))),
@@ -127,9 +149,11 @@ def _print_services(console: Console, services: list[Any]) -> None:
             "yes" if service.get("enabled") else "no",
             str(service.get("pid") or "-"),
             str(service.get("restart_count") or 0),
-            escape(_endpoint_summary(service.get("endpoints"))),
-            escape(str(service.get("source", ""))),
-        )
+        ]
+        if show_endpoint:
+            row.append(escape(endpoint_summary))
+        row.append(escape(str(service.get("source", ""))))
+        table.add_row(*row)
     console.print(table)
 
 
