@@ -22,8 +22,8 @@ def test_is_service_running_does_not_start_broker(
     registry = ServiceRegistry(
         [
             CondaService(
-                name="presto",
-                summary="Solver service",
+                name="package-cache",
+                summary="Package metadata cache",
                 source="tests",
                 process=ProcessSpec(argv=("python", "-V")),
             )
@@ -31,7 +31,7 @@ def test_is_service_running_does_not_start_broker(
     )
     monkeypatch.setattr(client, "discover_services", lambda: registry)
 
-    assert client.is_service_running("presto", paths=service_paths) is False
+    assert client.is_service_running("package-cache", paths=service_paths) is False
     assert not service_paths.server_file.exists()
     assert not service_paths.pid_file.exists()
 
@@ -74,7 +74,7 @@ def test_emit_event_without_broker_writes_local_event(
 ) -> None:
     event = client.emit_event(
         "plugin.event",
-        service="presto",
+        service="package-cache",
         message="offline",
         paths=service_paths,
     )

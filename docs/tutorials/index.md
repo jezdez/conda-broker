@@ -24,11 +24,11 @@ Create a tiny provider module that exposes a long-running Python process.
 Publish `conda_broker_services()` from an installed Python package.
 :::
 
-:::{grid-item-card} {octicon}`zap` Create a Presto-style solver service
-:link: presto-style-service
+:::{grid-item-card} {octicon}`database` Create a package cache service
+:link: package-cache-service
 :link-type: doc
 
-Expose a warmed solver API as a broker-managed service.
+Expose a local package metadata cache as a broker-managed service.
 :::
 
 ::::

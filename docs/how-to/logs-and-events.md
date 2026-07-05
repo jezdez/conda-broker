@@ -7,22 +7,22 @@
 Each service writes stdout and stderr to a service log file:
 
 ```bash
-cb logs presto
-cb logs presto --lines 200
-cb logs presto --previous
-cb logs presto --follow
+cb logs package-cache
+cb logs package-cache --lines 200
+cb logs package-cache --previous
+cb logs package-cache --follow
 ```
 
 JSON output returns a stable object:
 
 ```bash
-cb logs presto --json
+cb logs package-cache --json
 ```
 
 Follow mode with JSON emits JSON Lines:
 
 ```bash
-cb logs presto --follow --json
+cb logs package-cache --follow --json
 ```
 
 ## Events
@@ -43,5 +43,5 @@ Provider plugins can record events without starting the broker:
 ```python
 from conda_broker.client import emit_event
 
-emit_event("solver.cache_warmed", service="presto", message="ready")
+emit_event("package_cache.warmed", service="package-cache", message="ready")
 ```

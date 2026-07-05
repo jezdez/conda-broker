@@ -17,7 +17,7 @@ point group. Listing services does not start the broker process.
 ## Enable a Service
 
 ```bash
-cb enable presto
+cb enable package-cache
 ```
 
 Enabled services start when the broker starts. Providers may recommend
@@ -34,14 +34,14 @@ cb start
 only selected services:
 
 ```bash
-cb start presto
+cb start package-cache
 ```
 
 ## Check Status
 
 ```bash
 cb status
-cb status presto
+cb status package-cache
 cb status --json
 ```
 
@@ -51,21 +51,21 @@ for tools.
 ## Read Logs and Events
 
 ```bash
-cb logs presto --lines 100
+cb logs package-cache --lines 100
 cb events
 ```
 
 Follow modes stream output:
 
 ```bash
-cb logs presto --follow
+cb logs package-cache --follow
 cb events --follow --json
 ```
 
 ## Stop
 
 ```bash
-cb stop presto
+cb stop package-cache
 cb stop
 ```
 

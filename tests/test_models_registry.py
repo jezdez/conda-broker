@@ -17,19 +17,24 @@ from conda_broker.registry import ServiceRegistry
 
 def test_process_service_to_dict() -> None:
     service = CondaService(
-        name="presto",
-        summary="Solver service",
-        source="conda-presto",
+        name="package-cache",
+        summary="Package metadata cache",
+        source="conda-package-cache",
         start_policy="enabled",
         process=ProcessSpec(
-            argv=("conda", "presto", "--serve"),
+            argv=("python", "-m", "conda_package_cache", "--serve"),
             env={"CONDA_JSON": "true"},
         ),
         health_check=HealthCheck(type="process"),
     )
 
     assert service.enabled_by_default is True
-    assert service.to_dict()["process"]["argv"] == ["conda", "presto", "--serve"]
+    assert service.to_dict()["process"]["argv"] == [
+        "python",
+        "-m",
+        "conda_package_cache",
+        "--serve",
+    ]
     assert service.merged_process().env["CONDA_JSON"] == "true"
 
 
@@ -96,8 +101,8 @@ def test_unsupported_runtime_raises() -> None:
 
 def test_registry_rejects_duplicates() -> None:
     service = CondaService(
-        name="presto",
-        summary="Solver service",
+        name="package-cache",
+        summary="Package metadata cache",
         source="one",
         process=ProcessSpec(argv=("python", "-V")),
     )
@@ -107,7 +112,7 @@ def test_registry_rejects_duplicates() -> None:
             [
                 service,
                 CondaService(
-                    name="presto",
+                    name="package-cache",
                     summary="Duplicate",
                     source="two",
                     process=ProcessSpec(argv=("python", "-V")),
@@ -172,8 +177,8 @@ def test_registry_collects_registered_provider_services() -> None:
         @hookimpl
         def conda_broker_services(self):
             yield CondaService(
-                name="presto",
-                summary="Solver service",
+                name="package-cache",
+                summary="Package metadata cache",
                 source="tests",
                 process=ProcessSpec(argv=("python", "-V")),
             )
@@ -183,4 +188,4 @@ def test_registry_collects_registered_provider_services() -> None:
     registry.collect_provider_services()
 
     assert registry.get_plugin("provider") is not None
-    assert registry.names() == ["presto"]
+    assert registry.names() == ["package-cache"]

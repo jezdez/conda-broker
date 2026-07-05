@@ -35,8 +35,8 @@ Providers can emit any namespaced event type:
 
 ```python
 emit_event(
-    "solver.cache_warmed",
-    service="presto",
+    "package_cache.warmed",
+    service="package-cache",
     message="repodata cache is ready",
     data={"records": 425000},
 )

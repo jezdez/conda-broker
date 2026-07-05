@@ -1,8 +1,8 @@
-# Create a Presto-Style Solver Service
+# Create a Package Cache Service
 
-Solver services are a natural broker use case: the initial process startup
-can be expensive, but repeated solves can reuse warmed caches and in-memory
-state.
+Package metadata is a good broker example because a local cache can stay
+warm between conda commands without making every command responsible for
+starting or supervising a helper process.
 
 ## Service Spec
 
@@ -14,16 +14,16 @@ from conda_broker.models import CondaService, EndpointSpec, HealthCheck, Process
 @hookimpl
 def conda_broker_services():
     yield CondaService(
-        name="presto",
-        summary="Local long-running conda solver API",
-        source="conda-presto",
+        name="package-cache",
+        summary="Local conda package metadata cache",
+        source="conda-package-cache",
         start_policy="manual",
         restart_policy="on-failure",
         endpoints=(
             EndpointSpec(
                 protocol="http",
                 path="/health",
-                port_env="CONDA_PRESTO_PORT",
+                port_env="CONDA_PACKAGE_CACHE_PORT",
             ),
         ),
         health_check=HealthCheck(
@@ -33,7 +33,7 @@ def conda_broker_services():
             timeout_s=2,
         ),
         process=ProcessSpec(
-            argv=("conda", "presto", "--serve", "--host", "127.0.0.1"),
+            argv=("python", "-m", "conda_package_cache", "--serve"),
             env={"PYTHONUNBUFFERED": "1"},
             grace_period_s=15,
         ),
@@ -43,11 +43,11 @@ def conda_broker_services():
 ## User Workflow
 
 ```bash
-cb enable presto
-cb start presto
-cb wait presto
-cb status presto
-cb endpoint presto
+cb enable package-cache
+cb start package-cache
+cb wait package-cache
+cb status package-cache
+cb endpoint package-cache
 ```
 
 If a conda plugin wants to use the service opportunistically, it should use
@@ -56,11 +56,11 @@ the client API:
 ```python
 from conda_broker.client import get_service_endpoint, is_service_ready
 
-if is_service_ready("presto"):
-    endpoint = get_service_endpoint("presto")
-    use_presto_api(endpoint["url"])
+if is_service_ready("package-cache"):
+    endpoint = get_service_endpoint("package-cache")
+    query_local_metadata(endpoint["url"], "numpy")
 else:
-    run_regular_solver()
+    query_repodata_directly("numpy")
 ```
 
 This preserves user control: conda commands can benefit from a running

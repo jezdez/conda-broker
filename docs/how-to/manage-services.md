@@ -12,8 +12,8 @@ Discovered services are visible even when the broker is not running.
 ## Enable or Disable Autostart
 
 ```bash
-cb enable presto
-cb disable presto
+cb enable package-cache
+cb disable package-cache
 ```
 
 `enable` and `disable` validate names against discovered services. If a
@@ -23,16 +23,16 @@ broker startup instead of preventing other services from starting.
 Use `--start` or `--stop` to combine the state change with process action:
 
 ```bash
-cb enable presto --start
-cb disable presto --stop
+cb enable package-cache --start
+cb disable package-cache --stop
 ```
 
 ## Start and Stop
 
 ```bash
 cb start
-cb start presto
-cb stop presto
+cb start package-cache
+cb stop package-cache
 cb stop
 ```
 
@@ -42,8 +42,8 @@ shuts the broker down.
 ## Wait for Readiness
 
 ```bash
-cb wait presto --timeout 15
-cb wait presto --start --timeout 15
+cb wait package-cache --timeout 15
+cb wait package-cache --start --timeout 15
 ```
 
 `cb wait` exits successfully only when the service reports `ready=true`.
@@ -52,8 +52,8 @@ Use `--start` when startup itself should be part of the user-visible action.
 ## Show Endpoints
 
 ```bash
-cb endpoint presto
-cb endpoint presto default --json
+cb endpoint package-cache
+cb endpoint package-cache default --json
 ```
 
 Endpoint output shows the resolved URL for services that declare local TCP or
@@ -62,7 +62,7 @@ HTTP endpoints.
 ## Restart
 
 ```bash
-cb restart presto
+cb restart package-cache
 cb restart
 ```
 

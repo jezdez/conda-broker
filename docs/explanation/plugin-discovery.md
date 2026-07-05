@@ -17,7 +17,7 @@ also giving the rest of the broker a direct service catalog:
 
 ```python
 registry.names()
-registry.get("presto")
+registry.get("package-cache")
 registry.enabled_defaults()
 ```
 

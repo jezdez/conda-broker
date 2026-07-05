@@ -15,9 +15,9 @@ automation and remains separate from Rich human output.
   },
   "services": [
     {
-      "name": "presto",
-      "summary": "Local long-running conda solver API",
-      "source": "conda-presto",
+      "name": "package-cache",
+      "summary": "Local conda package metadata cache",
+      "source": "conda-package-cache",
       "runtime": "process",
       "enabled": true,
       "state": "ready",
@@ -49,9 +49,9 @@ automation and remains separate from Rich human output.
 {
   "services": [
     {
-      "name": "presto",
-      "summary": "Local long-running conda solver API",
-      "source": "conda-presto",
+      "name": "package-cache",
+      "summary": "Local conda package metadata cache",
+      "source": "conda-package-cache",
       "runtime": "process",
       "start_policy": "manual",
       "restart_policy": "on-failure",
@@ -68,7 +68,7 @@ automation and remains separate from Rich human output.
       ]
     }
   ],
-  "enabled": ["presto"]
+  "enabled": ["package-cache"]
 }
 ```
 
@@ -76,7 +76,7 @@ automation and remains separate from Rich human output.
 
 ```json
 {
-  "service": "presto",
+  "service": "package-cache",
   "endpoint_name": "default",
   "endpoint": {
     "name": "default",
@@ -111,8 +111,8 @@ the envelope has `ready: true`.
 `cb logs SERVICE --follow --json` emits JSON Lines:
 
 ```json
-{"service": "presto", "line": "ready"}
-{"service": "presto", "line": "handled solve request"}
+{"service": "package-cache", "line": "ready"}
+{"service": "package-cache", "line": "served numpy metadata"}
 ```
 
 ## Events Follow

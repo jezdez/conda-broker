@@ -25,10 +25,10 @@ from conda_broker.models import CondaService, ProcessSpec
 @hookimpl
 def conda_broker_services():
     yield CondaService(
-        name="presto",
-        summary="Local conda-presto solver API",
-        source="conda-presto",
-        process=ProcessSpec(argv=("conda", "presto", "--serve")),
+        name="package-cache",
+        summary="Local conda package metadata cache",
+        source="conda-package-cache",
+        process=ProcessSpec(argv=("python", "-m", "conda_package_cache", "--serve")),
     )
 ```
 
@@ -44,7 +44,7 @@ Plugins can make runtime decisions without starting the broker:
 ```python
 from conda_broker.client import is_service_running
 
-if is_service_running("presto"):
+if is_service_running("package-cache"):
     ...
 ```
 

@@ -6,9 +6,9 @@ process, a private pluggy provider API, local process supervision, logs,
 events, health checks, and a small client API for other plugins.
 
 Use it for tools that should not restart from scratch on every conda
-command: solver APIs, package recommendation workers, telemetry clients,
-local LLM helpers, and other opt-in services that users need to inspect
-and control.
+command: package metadata caches, package recommendation workers,
+telemetry clients, local LLM helpers, and other opt-in services that users
+need to inspect and control.
 
 ![quickstart demo](../demos/quickstart.gif)
 
@@ -29,10 +29,10 @@ pixi run cb status
 
 ```bash
 cb list
-cb enable presto
-cb start presto
+cb enable package-cache
+cb start package-cache
 cb status
-cb logs presto --follow
+cb logs package-cache --follow
 cb events
 ```
 
@@ -56,7 +56,7 @@ Start the broker, inspect state, and stop it again.
 :link: tutorials/index
 :link-type: doc
 
-Build a first service provider and a presto-style solver service.
+Build a first service provider and a package cache service.
 :::
 
 :::{grid-item-card} {octicon}`tools` How-to Guides
@@ -102,7 +102,7 @@ quickstart
 
 Register your first service <tutorials/first-service>
 Build a provider plugin <tutorials/provider-plugin>
-Create a Presto-style solver service <tutorials/presto-style-service>
+Create a package cache service <tutorials/package-cache-service>
 ```
 
 ```{toctree}
