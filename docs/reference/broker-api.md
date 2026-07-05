@@ -58,7 +58,7 @@ check = Broker.current().service("package-cache").check()
 print(check.to_dict())
 ```
 
-For plugin-owned `conda my-plugin start|stop|status` commands, use the
+For plugin-owned `conda my-plugin services start|stop|status` commands, use the
 [Plugin Command API](plugin-command-api.md).
 
 ```{eval-rst}

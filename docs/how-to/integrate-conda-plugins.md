@@ -191,8 +191,14 @@ Use this when the plugin already has a `conda_subcommands()` hook, or when a
 mostly hook-based plugin needs a small user-facing control surface for its
 optional broker service.
 
-For the common case, use `BrokerServiceCommands`. It installs broker
-subcommands scoped to the service names supplied by the plugin:
+Use `BrokerServiceCommands` to install broker subcommands scoped to the
+service names supplied by the plugin. Pick the mounting shape that matches
+the plugin.
+
+### Hook-Only Plugins
+
+If the plugin does not already publish a `conda_subcommands()` hook, use
+`conda_subcommand()` to create a small service-management command:
 
 ```python
 from conda import plugins
@@ -207,36 +213,29 @@ broker_commands = BrokerServiceCommands(
 
 @plugins.hookimpl
 def conda_subcommands():
-    yield plugins.CondaSubcommand(
-        name="my-plugin",
-        summary="Run conda-my-plugin commands.",
-        action=broker_commands.execute,
-        configure_parser=broker_commands.configure_parser,
+    yield broker_commands.conda_subcommand(
+        "my-plugin",
+        summary="Manage conda-my-plugin services.",
     )
 ```
 
-That gives users plugin-owned broker controls:
+That creates one stable command shape:
 
 ```bash
-conda my-plugin status
-conda my-plugin start
-conda my-plugin stop
-conda my-plugin restart
-conda my-plugin enable
-conda my-plugin disable
-conda my-plugin wait --start
-conda my-plugin logs
+conda my-plugin services status
+conda my-plugin services start
+conda my-plugin services stop
+conda my-plugin services restart
+conda my-plugin services enable
+conda my-plugin services disable
+conda my-plugin services wait --start
+conda my-plugin services logs
 ```
 
-All generated service arguments are restricted to the plugin's service list.
-For a single-service plugin, `start`, `stop`, `restart`, `enable`, `disable`,
-`status`, `wait`, and `logs` can omit the service name. For a multi-service
-plugin, commands that can sensibly target many services default to all plugin
-services, while `wait` and `logs` ask for one.
+### Plugins With Existing Subcommands
 
-If the plugin already has its own nested commands and the broker command
-names are still available, add broker controls to the same subparser
-collection:
+If the plugin already has its own nested commands, mount the same `services`
+group beside those commands:
 
 ```python
 from conda import plugins
@@ -255,7 +254,7 @@ def configure_parser(parser):
     run = subcommands.add_parser("run")
     run.set_defaults(handler=run_command)
 
-    broker_commands.add_to_subparsers(subcommands)
+    broker_commands.add_group_to_subparsers(subcommands)
 
 
 def execute(args):
@@ -277,64 +276,38 @@ def conda_subcommands():
 That makes plugin-specific commands such as these available:
 
 - `conda my-plugin run`: plugin-owned behavior.
-- `conda my-plugin status`: broker status for only this plugin's services.
-- `conda my-plugin start`: start all services declared by this plugin.
-- `conda my-plugin stop conda-my-plugin.worker`: stop one declared service.
-- `conda my-plugin logs`: either point users to `cb logs SERVICE` or wrap it
-  with the helper if the plugin has a strong reason to keep users inside one
-  CLI.
-
-If the plugin already owns names such as `status`, `start`, or `logs`, mount
-broker controls under a group:
-
-```python
-from conda import plugins
-from conda_broker.plugin_commands import BrokerServiceCommands
-
-
-broker_commands = BrokerServiceCommands(
-    services=("conda-my-plugin.helper", "conda-my-plugin.worker"),
-    source="conda-my-plugin",
-)
-
-
-def configure_parser(parser):
-    subcommands = parser.add_subparsers(dest="command")
-
-    status = subcommands.add_parser("status")
-    status.set_defaults(handler=status_command)
-
-    broker_commands.add_group_to_subparsers(subcommands, name="services")
-
-
-def execute(args):
-    if not hasattr(args, "handler"):
-        raise SystemExit("Choose a subcommand.")
-    return args.handler(args)
-
-
-@plugins.hookimpl
-def conda_subcommands():
-    yield plugins.CondaSubcommand(
-        name="my-plugin",
-        summary="Run conda-my-plugin commands.",
-        action=execute,
-        configure_parser=configure_parser,
-    )
-```
-
-That keeps the plugin's own commands and adds broker controls beneath
-`services`:
-
-- `conda my-plugin status`: plugin-owned status.
 - `conda my-plugin services status`: broker status for this plugin's services.
 - `conda my-plugin services start`: start all services declared by this plugin.
 - `conda my-plugin services stop conda-my-plugin.worker`: stop one declared
   service.
 - `conda my-plugin services logs conda-my-plugin.helper`: show one service log.
 
-Use `name="broker"` instead if that fits the plugin's vocabulary better, for
-example `conda my-plugin broker status`.
+### Plugins With a Custom `services` Parser
+
+If the plugin already creates its own `services` parser and only wants broker
+controls inside that parser, configure that parser directly:
+
+```python
+def configure_parser(parser):
+    subcommands = parser.add_subparsers(dest="command")
+    services = subcommands.add_parser("services")
+    services.set_defaults(handler=broker_commands.execute)
+    broker_commands.configure_commands_parser(services)
+```
+
+The lower-level `add_commands_to_subparsers()` method exists for advanced
+argparse layouts, but prefer the `services` group unless there is a strong
+reason not to.
+
+All generated service arguments are restricted to the plugin's service list.
+For a single-service plugin, `start`, `stop`, `restart`, `enable`, `disable`,
+`status`, `wait`, and `logs` can omit the service name. For a multi-service
+plugin, commands that can sensibly target many services default to all plugin
+services, while `wait` and `logs` ask for one.
+
+Keep the group name stable unless the plugin has a strong domain-specific
+reason to use another word. `services` is the default because users can learn
+one shape across plugins.
 
 Avoid starting broker from `conda_pre_commands()` or `conda_post_commands()`.
 Those hooks run during ordinary conda operations and should keep using the
@@ -360,13 +333,13 @@ or unhealthy, the plugin uses the normal inline implementation.
 
 Check service state with:
 
-    conda my-plugin status
+    conda my-plugin services status
 
 Manage the service with:
 
-    cb start conda-my-plugin.helper
-    cb enable conda-my-plugin.helper
-    cb logs conda-my-plugin.helper
+    conda my-plugin services start
+    conda my-plugin services enable
+    conda my-plugin services logs
 ```
 
 ## Avoid Surprises

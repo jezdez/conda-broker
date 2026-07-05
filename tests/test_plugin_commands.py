@@ -12,16 +12,35 @@ from conda_broker.models import ServiceStatus
 from conda_broker.plugin_commands import BrokerServiceCommands
 
 
+def test_plugin_service_commands_create_conda_subcommand() -> None:
+    pytest.importorskip("conda")
+    commands = BrokerServiceCommands(("plugin.api",))
+
+    item = commands.conda_subcommand(
+        "my-plugin",
+        summary="Manage my-plugin services.",
+    )
+
+    assert item.name == "my-plugin"
+    assert item.summary == "Manage my-plugin services."
+    assert item.action == commands.execute
+    assert item.configure_parser == commands.configure_parser
+
+
 def test_plugin_service_commands_configure_parser() -> None:
     commands = BrokerServiceCommands(("plugin.api",))
     parser = argparse.ArgumentParser(prog="conda my-plugin")
     commands.configure_parser(parser)
 
-    args = parser.parse_args(["start", "--timeout", "1"])
+    args = parser.parse_args(["services", "start", "--timeout", "1"])
 
+    assert args.broker_command == "services"
     assert args.services == []
     assert args.timeout == 1
     assert args.handler == commands.execute
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["start"])
 
 
 def test_plugin_service_commands_reject_foreign_service() -> None:
@@ -30,22 +49,34 @@ def test_plugin_service_commands_reject_foreign_service() -> None:
     commands.configure_parser(parser)
 
     with pytest.raises(SystemExit):
-        parser.parse_args(["status", "other.api"])
+        parser.parse_args(["services", "status", "other.api"])
 
 
-def test_plugin_service_commands_can_be_mixed_with_plugin_commands() -> None:
+def test_plugin_service_commands_can_be_mounted_directly() -> None:
     commands = BrokerServiceCommands(("plugin.api",))
     parser = argparse.ArgumentParser(prog="conda my-plugin")
     subcommands = parser.add_subparsers(dest="command")
     run = subcommands.add_parser("run")
     run.set_defaults(handler=lambda args: 7)
-    commands.add_to_subparsers(subcommands)
+    commands.add_commands_to_subparsers(subcommands)
 
     run_args = parser.parse_args(["run"])
     status_args = parser.parse_args(["status"])
 
     assert run_args.handler(run_args) == 7
     assert status_args.handler == commands.execute
+
+
+def test_plugin_service_commands_configure_direct_commands_parser() -> None:
+    commands = BrokerServiceCommands(("plugin.api",))
+    parser = argparse.ArgumentParser(prog="conda my-plugin services")
+    commands.configure_commands_parser(parser)
+
+    args = parser.parse_args(["status"])
+
+    assert args.service_command == "status"
+    assert args.services == []
+    assert args.handler == commands.execute
 
 
 def test_plugin_service_commands_can_be_grouped_to_avoid_collisions() -> None:
@@ -82,7 +113,7 @@ def test_plugin_service_status_filters_to_plugin_services(
     commands = BrokerServiceCommands(("plugin.api",), source="plugin")
     parser = argparse.ArgumentParser(prog="conda my-plugin")
     commands.configure_parser(parser)
-    args = parser.parse_args(["status", "--json"])
+    args = parser.parse_args(["services", "status", "--json"])
 
     def status(self: Broker, service: str | None = None) -> StatusSnapshot:
         return StatusSnapshot(
@@ -127,7 +158,7 @@ def test_plugin_service_start_defaults_to_all_plugin_services(
     commands = BrokerServiceCommands(("plugin.api", "plugin.worker"))
     parser = argparse.ArgumentParser(prog="conda my-plugin")
     commands.configure_parser(parser)
-    args = parser.parse_args(["start", "--json", "--timeout", "2"])
+    args = parser.parse_args(["services", "start", "--json", "--timeout", "2"])
     calls: list[tuple[tuple[str, ...], float]] = []
 
     def start_services(
@@ -171,6 +202,7 @@ def test_plugin_service_logs_defaults_for_single_service(
     commands.configure_parser(parser)
     args = parser.parse_args(
         [
+            "services",
             "logs",
             "--runtime-dir",
             str(service_paths.runtime_dir),

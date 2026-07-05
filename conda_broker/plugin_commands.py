@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Any
 
+    from conda.plugins.types import CondaSubcommand
     from rich.console import Console
 
 
@@ -43,8 +44,9 @@ class BrokerServiceCommands:
 
     The generated commands are scoped to the service names passed to the
     constructor. Positional service arguments use those names as argparse
-    choices, and commands without explicit service arguments default to the
-    same set.
+    choices, and commands without explicit service arguments default to the same
+    set. The default parser shape mounts broker controls under ``services``,
+    producing commands like ``conda my-plugin services status``.
     """
 
     services: tuple[str, ...]
@@ -74,12 +76,37 @@ class BrokerServiceCommands:
         object.__setattr__(self, "commands", requested)
 
     def configure_parser(self, parser: argparse.ArgumentParser) -> None:
-        """Configure a parser whose subcommands are broker service commands."""
+        """Configure a parser with a ``services`` broker command group."""
         subcommands = parser.add_subparsers(dest="broker_command")
-        self.add_to_subparsers(subcommands)
+        self.add_group_to_subparsers(subcommands)
 
-    def add_to_subparsers(self, subcommands) -> None:
-        """Add scoped broker commands to an existing subparser collection."""
+    def configure_commands_parser(self, parser: argparse.ArgumentParser) -> None:
+        """Configure a parser whose subcommands are direct broker commands."""
+        subcommands = parser.add_subparsers(dest="service_command")
+        self.add_commands_to_subparsers(subcommands)
+
+    def conda_subcommand(
+        self,
+        name: str,
+        *,
+        summary: str,
+    ) -> CondaSubcommand:
+        """Return a ``CondaSubcommand`` exposing this plugin's service group."""
+        from conda.plugins.types import CondaSubcommand
+
+        return CondaSubcommand(
+            name=name,
+            summary=summary,
+            action=self.execute,
+            configure_parser=self.configure_parser,
+        )
+
+    def add_commands_to_subparsers(self, subcommands) -> None:
+        """Add direct broker commands to an existing subparser collection.
+
+        Prefer ``configure_parser()`` or ``add_group_to_subparsers()`` for the
+        standard ``services`` command group.
+        """
         if "status" in self.commands:
             parser = subcommands.add_parser(
                 "status",
@@ -190,8 +217,7 @@ class BrokerServiceCommands:
         """
         parser = subcommands.add_parser(name, help=help, description=description)
         parser.set_defaults(handler=self.execute)
-        nested = parser.add_subparsers(dest=f"{name.replace('-', '_')}_command")
-        self.add_to_subparsers(nested)
+        self.configure_commands_parser(parser)
         return parser
 
     def execute(

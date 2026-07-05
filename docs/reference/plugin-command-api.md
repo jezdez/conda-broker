@@ -1,8 +1,8 @@
 # Plugin Command API
 
 `BrokerServiceCommands` helps conda plugins expose plugin-owned broker
-commands such as `conda my-plugin start`, `conda my-plugin stop`, and
-`conda my-plugin status`.
+commands such as `conda my-plugin services start`,
+`conda my-plugin services stop`, and `conda my-plugin services status`.
 
 The helper is intentionally scoped: plugin authors pass the broker service
 names that belong to their plugin, and generated positional service arguments
@@ -14,11 +14,12 @@ from conda_broker.plugin_commands import BrokerServiceCommands
 broker_commands = BrokerServiceCommands(("conda-my-plugin.helper",))
 ```
 
-Use `configure_parser()` when the plugin command is entirely broker service
-management. Use `add_to_subparsers()` to mix broker controls directly into an
-existing subcommand tree. Use `add_group_to_subparsers()` when the plugin
-already owns names such as `status` or `start`, producing commands like
-`conda my-plugin services status`.
+Use `conda_subcommand()` when the plugin does not already have a conda
+subcommand. Use `add_group_to_subparsers()` when the plugin has an existing
+subcommand tree and needs a `services` subcommand inside it. Use
+`configure_commands_parser()` when the plugin has already created a parser
+that should contain direct broker service commands. `add_commands_to_subparsers()`
+is a lower-level escape hatch for unusual argparse layouts.
 
 ```{eval-rst}
 .. automodule:: conda_broker.plugin_commands
