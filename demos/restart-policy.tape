@@ -25,6 +25,11 @@ Type@80ms "cb start flaky"
 Enter
 Wait /\$/
 Sleep 3s
+Hide
+Type "clear"
+Enter
+Wait /\$/
+Show
 
 Type "# The restart policy brings it back"
 Enter
@@ -33,6 +38,11 @@ Type@80ms "cb status flaky"
 Enter
 Wait /\$/
 Sleep 1s
+Hide
+Type "clear"
+Enter
+Wait /\$/
+Show
 
 Type "# Events show the crash and scheduled restart"
 Enter
