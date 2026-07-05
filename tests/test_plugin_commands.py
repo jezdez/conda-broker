@@ -48,6 +48,33 @@ def test_plugin_service_commands_can_be_mixed_with_plugin_commands() -> None:
     assert status_args.handler == commands.execute
 
 
+def test_plugin_service_commands_can_be_grouped_to_avoid_collisions() -> None:
+    commands = BrokerServiceCommands(("plugin.api",))
+    parser = argparse.ArgumentParser(prog="conda my-plugin")
+    subcommands = parser.add_subparsers(dest="command")
+    status = subcommands.add_parser("status")
+    status.set_defaults(handler=lambda args: 3)
+    commands.add_group_to_subparsers(subcommands)
+
+    plugin_status_args = parser.parse_args(["status"])
+    broker_status_args = parser.parse_args(["services", "status"])
+
+    assert plugin_status_args.handler(plugin_status_args) == 3
+    assert broker_status_args.command == "services"
+    assert broker_status_args.services == []
+    assert broker_status_args.handler == commands.execute
+
+
+def test_grouped_plugin_service_commands_reject_foreign_service() -> None:
+    commands = BrokerServiceCommands(("plugin.api",))
+    parser = argparse.ArgumentParser(prog="conda my-plugin")
+    subcommands = parser.add_subparsers(dest="command")
+    commands.add_group_to_subparsers(subcommands, name="broker")
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["broker", "start", "other.api"])
+
+
 def test_plugin_service_status_filters_to_plugin_services(
     monkeypatch,
     capsys,

@@ -174,6 +174,26 @@ class BrokerServiceCommands:
             parser.add_argument("--follow", "-f", action="store_true", default=False)
             self._set_action(parser, "logs")
 
+    def add_group_to_subparsers(
+        self,
+        subcommands,
+        *,
+        name: str = "services",
+        help: str = "Manage broker services.",
+        description: str | None = None,
+    ) -> argparse.ArgumentParser:
+        """Add broker commands under a named nested subcommand.
+
+        This is the collision-free form for plugins that already own names such
+        as ``status`` or ``start``. For example, mounting the default group
+        creates commands like ``conda my-plugin services status``.
+        """
+        parser = subcommands.add_parser(name, help=help, description=description)
+        parser.set_defaults(handler=self.execute)
+        nested = parser.add_subparsers(dest=f"{name.replace('-', '_')}_command")
+        self.add_to_subparsers(nested)
+        return parser
+
     def execute(
         self,
         args: argparse.Namespace,
