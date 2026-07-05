@@ -31,6 +31,13 @@ Service models, hookspecs, and registry behavior.
 Objects for status checks, service actions, and event emission.
 :::
 
+:::{grid-item-card} {octicon}`terminal` Plugin Command API
+:link: plugin-command-api
+:link-type: doc
+
+Argparse helpers for plugin-owned broker service commands.
+:::
+
 :::{grid-item-card} {octicon}`file-code` JSON output
 :link: json-output
 :link-type: doc

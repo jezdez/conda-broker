@@ -126,6 +126,7 @@ Validate provider services <how-to/validate-provider-services>
 CLI <reference/cli>
 Provider API <reference/provider-api>
 Broker API <reference/broker-api>
+Plugin Command API <reference/plugin-command-api>
 JSON output <reference/json-output>
 Events <reference/events>
 Filesystem layout <reference/filesystem>

@@ -191,8 +191,61 @@ Use this when the plugin already has a `conda_subcommands()` hook, or when a
 mostly hook-based plugin needs a small user-facing control surface for its
 optional broker service.
 
+For the common case, use `BrokerServiceCommands`. It installs broker
+subcommands scoped to the service names supplied by the plugin:
+
 ```python
 from conda import plugins
+from conda_broker.plugin_commands import BrokerServiceCommands
+
+
+broker_commands = BrokerServiceCommands(
+    services=("conda-my-plugin.helper",),
+    source="conda-my-plugin",
+)
+
+
+@plugins.hookimpl
+def conda_subcommands():
+    yield plugins.CondaSubcommand(
+        name="my-plugin",
+        summary="Run conda-my-plugin commands.",
+        action=broker_commands.execute,
+        configure_parser=broker_commands.configure_parser,
+    )
+```
+
+That gives users plugin-owned broker controls:
+
+```bash
+conda my-plugin status
+conda my-plugin start
+conda my-plugin stop
+conda my-plugin restart
+conda my-plugin enable
+conda my-plugin disable
+conda my-plugin wait --start
+conda my-plugin logs
+```
+
+All generated service arguments are restricted to the plugin's service list.
+For a single-service plugin, `start`, `stop`, `restart`, `enable`, `disable`,
+`status`, `wait`, and `logs` can omit the service name. For a multi-service
+plugin, commands that can sensibly target many services default to all plugin
+services, while `wait` and `logs` ask for one.
+
+If the plugin already has its own nested commands, add broker controls to the
+same subparser collection:
+
+```python
+from conda import plugins
+from conda_broker.plugin_commands import BrokerServiceCommands
+
+
+broker_commands = BrokerServiceCommands(
+    services=("conda-my-plugin.helper", "conda-my-plugin.worker"),
+    source="conda-my-plugin",
+)
 
 
 def configure_parser(parser):
@@ -201,14 +254,7 @@ def configure_parser(parser):
     run = subcommands.add_parser("run")
     run.set_defaults(handler=run_command)
 
-    status = subcommands.add_parser("status")
-    status.add_argument("--json", action="store_true")
-    status.set_defaults(handler=status_command)
-
-    start = subcommands.add_parser("start-helper")
-    start.add_argument("--wait", action="store_true")
-    start.add_argument("--timeout", type=float, default=15.0)
-    start.set_defaults(handler=start_helper_command)
+    broker_commands.add_to_subparsers(subcommands)
 
 
 def execute(args):
@@ -227,14 +273,17 @@ def conda_subcommands():
     )
 ```
 
-Keep broker checks in commands that users intentionally run:
+That makes plugin-specific commands such as these available:
 
-- `conda my-plugin status`: query `service.check()` and report fallback state.
+- `conda my-plugin run`: plugin-owned behavior.
+- `conda my-plugin status`: broker status for only this plugin's services.
+- `conda my-plugin start`: start all services declared by this plugin.
+- `conda my-plugin stop conda-my-plugin.worker`: stop one declared service.
 - `conda my-plugin doctor`: include broker readiness beside the plugin's own
-  diagnostics.
-- `conda my-plugin start-helper`: explicitly start the broker service.
+  diagnostics if the plugin provides a custom doctor command.
 - `conda my-plugin logs`: either point users to `cb logs SERVICE` or wrap it
-  if the plugin has a strong reason to keep users inside one CLI.
+  with the helper if the plugin has a strong reason to keep users inside one
+  CLI.
 
 Avoid starting broker from `conda_pre_commands()` or `conda_post_commands()`.
 Those hooks run during ordinary conda operations and should keep using the
