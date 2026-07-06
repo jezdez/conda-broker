@@ -7,7 +7,7 @@ import threading
 from collections import deque
 from typing import TYPE_CHECKING
 
-from .files import atomic_write_json, file_lock
+from .files import atomic_write_json, file_lock, restrict_permissions, rotate_file
 from .models import ServiceEvent
 
 if TYPE_CHECKING:
@@ -21,8 +21,11 @@ if TYPE_CHECKING:
 class StateStore:
     """Small JSON-backed state store for enabled services and events."""
 
-    def __init__(self, paths: ServicePaths) -> None:
+    def __init__(
+        self, paths: ServicePaths, *, max_event_bytes: int = 5_000_000
+    ) -> None:
         self.paths = paths
+        self.max_event_bytes = max_event_bytes
         self._lock = threading.Lock()
         self.paths.ensure()
 
@@ -68,15 +71,19 @@ class StateStore:
         line = json.dumps(event.to_dict(), sort_keys=True)
         with self._lock:
             with file_lock(self.paths.state_lock_file):
-                self.paths.events_file.parent.mkdir(parents=True, exist_ok=True)
+                rotate_file(self.paths.events_file, max_bytes=self.max_event_bytes)
                 with self.paths.events_file.open("a", encoding="utf-8") as stream:
+                    restrict_permissions(self.paths.events_file)
                     stream.write(line + "\n")
         return event
 
     def read_events(self, *, limit: int | None = None) -> list[dict[str, Any]]:
         with self._lock:
             with file_lock(self.paths.state_lock_file):
-                return self._read_events_unlocked(self.paths.events_file, limit=limit)
+                return self._read_events_unlocked(
+                    self._event_paths(),
+                    limit=limit,
+                )
 
     def _read_enabled(self) -> set[str]:
         path = self.paths.enabled_file
@@ -93,20 +100,25 @@ class StateStore:
 
     @staticmethod
     def _read_events_unlocked(
-        path: Path,
+        paths: Iterable[Path],
         *,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
-        if not path.exists():
-            return []
         if limit is not None and limit <= 0:
             return []
         rows: deque[dict[str, Any]] = deque(maxlen=limit)
-        with path.open(encoding="utf-8") as stream:
-            for line in stream:
-                try:
-                    row = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                rows.append(row)
+        for path in paths:
+            if not path.exists():
+                continue
+            with path.open(encoding="utf-8") as stream:
+                for line in stream:
+                    try:
+                        row = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    rows.append(row)
         return list(rows)
+
+    def _event_paths(self) -> list[Path]:
+        previous = self.paths.events_file.with_name(f"{self.paths.events_file.name}.1")
+        return [previous, self.paths.events_file]

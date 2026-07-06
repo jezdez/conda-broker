@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
+from .files import atomic_write_text
 from .ipc import HOST, ServerInfo, generate_token, ping, write_server_info
 from .paths import ServicePaths
 from .registry import discover_services
@@ -66,7 +67,7 @@ class BrokerServer:
     def run(self) -> int:
         self.paths.ensure()
         self._acquire_lock()
-        self.paths.pid_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
+        atomic_write_text(self.paths.pid_file, f"{os.getpid()}\n")
         self.supervisor.start_monitor()
 
         try:

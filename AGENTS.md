@@ -9,7 +9,7 @@
   Subcommands live in `conda_broker/cli/services/`.
 - Root modules own shared behavior: `models.py`, `registry.py`,
   `state.py`, `paths.py`, `ipc.py`, `logs.py`, `supervisor.py`,
-  `client.py`, `broker.py`, `exceptions.py`, and `hookspec.py`.
+  `api.py`, `broker.py`, `exceptions.py`, and `hookspec.py`.
 - Runtime implementations live under `conda_broker/runtimes/`.
   `process.py` is the local host-process backend.
 

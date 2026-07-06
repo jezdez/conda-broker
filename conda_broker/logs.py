@@ -6,6 +6,7 @@ import time
 from collections import deque
 from typing import TYPE_CHECKING
 
+from .files import ensure_private_dir, restrict_permissions, rotate_file
 from .models import validate_service_name
 
 if TYPE_CHECKING:
@@ -30,13 +31,11 @@ class LogManager:
 
     def open_for_service(self, service: str) -> TextIO:
         path = self.path_for(service)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists() and path.stat().st_size > self.max_bytes:
-            previous = path.with_suffix(".log.1")
-            if previous.exists():
-                previous.unlink()
-            path.replace(previous)
-        return path.open("a", encoding="utf-8")
+        ensure_private_dir(path.parent)
+        rotate_file(path, max_bytes=self.max_bytes)
+        stream = path.open("a", encoding="utf-8")
+        restrict_permissions(path)
+        return stream
 
     def read_lines(
         self,
@@ -65,12 +64,46 @@ class LogManager:
 
     def follow(self, service: str) -> Iterator[str]:
         path = self.path_for(service)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with path.open("a+", encoding="utf-8") as stream:
+        ensure_private_dir(path.parent)
+        stream = path.open("a+", encoding="utf-8")
+        try:
+            restrict_permissions(path)
+            identity = _file_id(path)
             stream.seek(0, 2)
             while True:
                 line = stream.readline()
                 if line:
                     yield line.rstrip("\n")
+                elif _should_reopen(path, identity, stream.tell()):
+                    stream.close()
+                    ensure_private_dir(path.parent)
+                    stream = path.open("a+", encoding="utf-8")
+                    restrict_permissions(path)
+                    identity = _file_id(path)
+                    stream.seek(0)
                 else:
                     time.sleep(0.25)
+        finally:
+            stream.close()
+
+
+def _file_id(path: Path) -> tuple[int, int] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return (stat.st_dev, stat.st_ino)
+
+
+def _should_reopen(
+    path: Path,
+    identity: tuple[int, int] | None,
+    position: int,
+) -> bool:
+    try:
+        stat = path.stat()
+    except OSError:
+        return True
+    if identity is not None and (stat.st_dev, stat.st_ino) != identity:
+        return True
+    return stat.st_size < position

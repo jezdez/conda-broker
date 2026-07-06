@@ -18,10 +18,30 @@ if os.name == "nt":
 else:
     import fcntl
 
+PRIVATE_DIR_MODE = 0o700
+PRIVATE_FILE_MODE = 0o600
+
+
+def ensure_private_dir(path: Path, *, mode: int = PRIVATE_DIR_MODE) -> None:
+    """Create a directory and restrict traversal where the platform allows."""
+    path.mkdir(parents=True, exist_ok=True)
+    try:
+        path.chmod(mode)
+    except OSError:
+        pass
+
+
+def restrict_permissions(path: Path, *, mode: int = PRIVATE_FILE_MODE) -> None:
+    """Restrict file permissions where the platform allows."""
+    try:
+        path.chmod(mode)
+    except OSError:
+        pass
+
 
 def atomic_write_json(path: Path, data: dict[str, Any], *, mode: int = 0o600) -> None:
     """Atomically write JSON and restrict permissions where the platform allows."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(path.parent)
     fd, tmp_name = tempfile.mkstemp(
         prefix=f".{path.name}.",
         suffix=".tmp",
@@ -33,10 +53,7 @@ def atomic_write_json(path: Path, data: dict[str, Any], *, mode: int = 0o600) ->
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(data, stream, indent=2, sort_keys=True)
             stream.write("\n")
-        try:
-            tmp.chmod(mode)
-        except OSError:
-            pass
+        restrict_permissions(tmp, mode=mode)
         tmp.replace(path)
     except Exception:
         try:
@@ -46,11 +63,60 @@ def atomic_write_json(path: Path, data: dict[str, Any], *, mode: int = 0o600) ->
         raise
 
 
+def atomic_write_text(path: Path, text: str, *, mode: int = 0o600) -> None:
+    """Atomically write text and restrict permissions where the platform allows."""
+    ensure_private_dir(path.parent)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+        dir=path.parent,
+        text=True,
+    )
+    tmp = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(text)
+        restrict_permissions(tmp, mode=mode)
+        tmp.replace(path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def rotate_file(path: Path, *, max_bytes: int, mode: int = 0o600) -> Path | None:
+    """Rotate *path* to ``<name>.1`` when it is larger than *max_bytes*."""
+    if max_bytes <= 0:
+        return None
+    try:
+        if path.stat().st_size <= max_bytes:
+            return None
+    except FileNotFoundError:
+        return None
+
+    previous = path.with_name(f"{path.name}.1")
+    try:
+        previous.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return None
+    try:
+        path.replace(previous)
+    except OSError:
+        return None
+    restrict_permissions(previous, mode=mode)
+    return previous
+
+
 @contextmanager
 def file_lock(path: Path) -> Iterator[TextIO]:
     """Hold an exclusive cross-process advisory lock for a small state update."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    ensure_private_dir(path.parent)
     with path.open("a+", encoding="utf-8") as stream:
+        restrict_permissions(path)
         _lock_stream(stream)
         try:
             yield stream

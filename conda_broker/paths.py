@@ -7,6 +7,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .files import ensure_private_dir
+
 
 def _platformdirs_path(function_name: str, appname: str) -> Path | None:
     try:
@@ -118,5 +120,5 @@ class ServicePaths:
         return self.log_dir / "broker.log"
 
     def ensure(self) -> None:
-        self.runtime_dir.mkdir(parents=True, exist_ok=True)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
+        ensure_private_dir(self.runtime_dir)
+        ensure_private_dir(self.log_dir)

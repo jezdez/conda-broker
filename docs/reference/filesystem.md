@@ -8,6 +8,7 @@ Runtime data defaults to `platformdirs.user_runtime_dir("conda") / "broker"`:
 - `state.lock`: shared lock for enabled-state and event writes
 - `enabled.json`: user enabled service set
 - `events.jsonl`: append-only event records
+- `events.jsonl.1`: previous rotated event records
 
 Log data defaults to `platformdirs.user_log_dir("conda") / "broker"`:
 
@@ -15,5 +16,6 @@ Log data defaults to `platformdirs.user_log_dir("conda") / "broker"`:
 - `<service>.log`: service stdout and stderr
 - `<service>.log.1`: previous rotated service log
 
-Private files are written with user-readable-only permissions where the
-platform supports it.
+Runtime and log directories are created with user-only permissions where the
+platform supports it. Private files are written with user-readable-only
+permissions.

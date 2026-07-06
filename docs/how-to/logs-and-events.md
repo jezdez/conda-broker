@@ -25,6 +25,9 @@ Follow mode with JSON emits JSON Lines:
 cb logs package-cache --follow --json
 ```
 
+Service logs rotate by size. Follow mode reopens the active log when rotation
+replaces it, so long-running terminals keep following the current service log.
+
 ## Events
 
 Events are append-only records for broker lifecycle, service lifecycle,
@@ -48,3 +51,6 @@ Broker.current().service("package-cache").emit_event(
     message="ready",
 )
 ```
+
+Events rotate by size into `events.jsonl.1`. Event reads include the rotated
+file before the active file, so recent history remains visible after rotation.
