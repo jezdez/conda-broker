@@ -116,7 +116,7 @@ class BrokerServiceCommands:
             parser.add_argument(
                 "services",
                 nargs="*",
-                choices=self.services,
+                type=self._service_argument,
                 help="Services to inspect. Omit to inspect all plugin services.",
             )
             self._set_action(parser, "status")
@@ -124,7 +124,7 @@ class BrokerServiceCommands:
         if "start" in self.commands:
             parser = subcommands.add_parser("start", help="Start broker services.")
             self._add_common_options(parser)
-            parser.add_argument("services", nargs="*", choices=self.services)
+            parser.add_argument("services", nargs="*", type=self._service_argument)
             parser.add_argument(
                 "--timeout",
                 type=_positive_float,
@@ -136,13 +136,13 @@ class BrokerServiceCommands:
         if "stop" in self.commands:
             parser = subcommands.add_parser("stop", help="Stop broker services.")
             self._add_common_options(parser)
-            parser.add_argument("services", nargs="*", choices=self.services)
+            parser.add_argument("services", nargs="*", type=self._service_argument)
             self._set_action(parser, "stop")
 
         if "restart" in self.commands:
             parser = subcommands.add_parser("restart", help="Restart broker services.")
             self._add_common_options(parser)
-            parser.add_argument("services", nargs="*", choices=self.services)
+            parser.add_argument("services", nargs="*", type=self._service_argument)
             parser.add_argument(
                 "--timeout",
                 type=_positive_float,
@@ -157,7 +157,7 @@ class BrokerServiceCommands:
                 help="Enable broker services on broker start.",
             )
             self._add_common_options(parser)
-            parser.add_argument("services", nargs="*", choices=self.services)
+            parser.add_argument("services", nargs="*", type=self._service_argument)
             parser.add_argument("--start", action="store_true", default=False)
             self._set_action(parser, "enable")
 
@@ -167,7 +167,7 @@ class BrokerServiceCommands:
                 help="Disable broker services on broker start.",
             )
             self._add_common_options(parser)
-            parser.add_argument("services", nargs="*", choices=self.services)
+            parser.add_argument("services", nargs="*", type=self._service_argument)
             parser.add_argument("--stop", action="store_true", default=False)
             self._set_action(parser, "disable")
 
@@ -177,7 +177,7 @@ class BrokerServiceCommands:
                 help="Wait for a broker service to become ready.",
             )
             self._add_common_options(parser)
-            parser.add_argument("service", nargs="?", choices=self.services)
+            parser.add_argument("service", nargs="?", type=self._service_argument)
             parser.add_argument(
                 "--timeout",
                 type=_positive_float,
@@ -195,7 +195,7 @@ class BrokerServiceCommands:
         if "logs" in self.commands:
             parser = subcommands.add_parser("logs", help="Show broker service logs.")
             self._add_common_options(parser)
-            parser.add_argument("service", nargs="?", choices=self.services)
+            parser.add_argument("service", nargs="?", type=self._service_argument)
             parser.add_argument("--lines", type=_positive_int, default=50)
             parser.add_argument("--previous", action="store_true", default=False)
             parser.add_argument("--follow", "-f", action="store_true", default=False)
@@ -436,6 +436,14 @@ class BrokerServiceCommands:
             raise CondaBrokerError(
                 "Unknown broker service for this plugin: " + ", ".join(invalid)
             )
+
+    def _service_argument(self, value: str) -> str:
+        if value not in self.services:
+            choices = ", ".join(repr(service) for service in self.services)
+            raise argparse.ArgumentTypeError(
+                f"invalid choice: {value!r} (choose from {choices})"
+            )
+        return value
 
     def _add_common_options(self, parser: argparse.ArgumentParser) -> None:
         parser.add_argument(
