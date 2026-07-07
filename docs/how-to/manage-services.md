@@ -36,8 +36,9 @@ cb stop package-cache
 cb stop
 ```
 
-`cb start` starts the broker and enabled services. `cb stop` without names
-shuts the broker down.
+`cb start` starts the broker and services enabled for broker startup.
+`cb start SERVICE` starts selected services explicitly. `cb stop` without
+names shuts the broker down.
 
 For Python scripts that need temporary lifecycle ownership, use the `Broker`
 API context managers:

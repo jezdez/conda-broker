@@ -7,6 +7,14 @@ By default, runtime and log data live under conda's application namespace:
 
 The exact platform base directory depends on the operating system.
 
+Path resolution uses this precedence:
+
+1. Explicit `--runtime-dir` and `--log-dir` CLI options, or explicit
+   `ServicePaths` passed to the Python API.
+2. `CONDA_BROKER_RUNTIME_DIR` and `CONDA_BROKER_LOG_DIR`.
+3. Conda settings.
+4. Platform defaults.
+
 ## CLI Overrides
 
 ```bash

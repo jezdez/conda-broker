@@ -7,8 +7,10 @@ import json
 import pytest
 from rich.console import Console
 
+from conda_broker import Broker, BrokerState, StatusSnapshot
 from conda_broker.cli.main import execute_broker, generate_broker_parser
 from conda_broker.cli.services.common import emit_payload
+from conda_broker.models import ServiceStatus
 
 
 def test_status_accepts_top_level_json() -> None:
@@ -34,6 +36,58 @@ def test_start_parser_args() -> None:
     assert args.subcmd == "start"
     assert args.services == ["package-cache"]
     assert args.timeout == 1
+
+
+def test_start_without_services_starts_broker_only(
+    monkeypatch,
+    service_paths,
+    capsys,
+) -> None:
+    parser = generate_broker_parser()
+    args = parser.parse_args(
+        [
+            "start",
+            "--json",
+            "--runtime-dir",
+            str(service_paths.runtime_dir),
+            "--log-dir",
+            str(service_paths.log_dir),
+        ]
+    )
+    calls: list[tuple[str, float | str | None]] = []
+
+    def start(self: Broker, *, timeout_s: float = 5.0) -> BrokerState:
+        calls.append(("start", timeout_s))
+        return BrokerState(running=True, started=True)
+
+    def status(self: Broker, service: str | None = None) -> StatusSnapshot:
+        calls.append(("status", service))
+        return StatusSnapshot(
+            services=(
+                ServiceStatus(
+                    name="package-cache",
+                    summary="Package metadata cache",
+                    source="tests",
+                    runtime="process",
+                    enabled=True,
+                    state="starting",
+                ),
+            ),
+        )
+
+    def start_services(self: Broker, *args, **kwargs) -> StatusSnapshot:
+        raise AssertionError("bare cb start must not start every discovered service")
+
+    monkeypatch.setattr(Broker, "start", start)
+    monkeypatch.setattr(Broker, "status", status)
+    monkeypatch.setattr(Broker, "start_services", start_services)
+
+    assert execute_broker(args, parser=parser) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert calls == [("start", 5.0), ("status", None)]
+    assert payload["broker"] == {"running": True, "started": True}
+    assert [service["name"] for service in payload["services"]] == ["package-cache"]
 
 
 def test_dev_parser_args() -> None:

@@ -30,5 +30,7 @@ Alias:
 conda_broker_log_dir: /path/to/logs
 ```
 
+Explicit CLI or API paths take precedence over environment variables.
 Environment variables `CONDA_BROKER_RUNTIME_DIR` and `CONDA_BROKER_LOG_DIR`
-take precedence in direct process startup contexts.
+take precedence over conda settings, and conda settings take precedence over
+platform defaults.

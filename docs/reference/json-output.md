@@ -60,9 +60,9 @@ automation and remains separate from Rich human output.
           "name": "default",
           "protocol": "http",
           "host": "127.0.0.1",
-          "port": 17654,
+          "port": null,
           "path": "/health",
-          "port_env": null,
+          "port_env": "CONDA_PACKAGE_CACHE_PORT",
           "url_env": null
         }
       ]

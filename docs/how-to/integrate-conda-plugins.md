@@ -9,8 +9,8 @@ describe the host plugin system: packages register a module under
 `[project.entry-points.conda]`, then expose hooks such as
 `conda_subcommands()` and `conda_settings()`. The
 [conda-plugins catalogue](https://github.com/conda-incubator/conda-plugins)
-shows the common shapes: subcommands, solver hooks, pre/post command hooks,
-health checks, package extractors, shell completion, and channel tooling.
+shows the common shapes: subcommands, solver hooks, auth helpers, telemetry,
+channel tooling, environment specs, and environment/project helpers.
 
 ## Choose the Integration Shape
 
@@ -28,13 +28,14 @@ From the current catalogue, these are the useful patterns:
 
 | Plugin shape | Catalogue examples | Broker opportunity |
 | --- | --- | --- |
-| Local server started by hooks | `conda-pypi-channel` | Replace ad hoc `Popen` lifecycle with a visible broker service, HTTP health check, logs, events, and a stable endpoint. |
-| Metadata and conversion cache | `conda-pypi`, `conda-index`, `conda-subchannel` | Keep one-shot commands, but optionally reuse a warm local cache or index service when it is already ready. |
-| Solver or repoquery backend | `conda-libmamba-solver`, `conda-rattler-solver` | Query a ready cache/helper service before rebuilding expensive in-memory state; fall back to the normal solver path. |
-| Completion or manifest generation | `conda-completion` | Keep post-command regeneration safe and inline, but optionally defer heavier refresh work to a broker service. |
-| UI wrapper | `conda-tui` | Display broker service checks and offer explicit user actions to start or stop plugin services. |
-| Guardrail or audit hooks | `conda-protect`, `conda-checkpoints` | Keep enforcement inline. Only add broker for optional event shipping, report generation, or expensive background indexing. |
-| Pure subcommands | `conda-tree`, `conda-lock` | Do nothing unless profiling shows repeated commands need a warm helper process. |
+| Local channel or repodata helpers | `conda-pypi-channel`, `conda-repodata` | Replace ad hoc `Popen` or hidden cache lifecycles with a visible broker service, HTTP health check, logs, events, and a stable endpoint. |
+| Metadata and conversion cache | `conda-pypi`, `conda_index` | Keep one-shot commands, but optionally reuse a warm local cache or index service when it is already ready. |
+| Solver or repoquery backend | `conda-libmamba-solver`, `conda-random-solver` | Query a ready cache/helper service before rebuilding expensive in-memory state; fall back to the normal solver path. |
+| Completion, history, or environment metadata | `conda-completion`, `conda-history-d`, `conda-env-spec-v2`, `conda-lockfiles` | Keep lightweight hook work inline, but optionally defer heavier refresh or indexing work to a broker service. |
+| Environment or project helpers | `conda-spawn`, `conda-global`, `conda-ops`, `conda-declarative` | Keep command execution explicit, but expose optional status and service controls if a plugin adds a persistent helper. |
+| UI or assistant wrapper | `conda-tui`, `anaconda-assistant-mcp` | Display broker service checks and offer explicit user actions to start or stop plugin services. |
+| Auth, telemetry, or request hooks | `anaconda-auth`, `conda-anaconda-telemetry`, `conda-dev-request-headers` | Keep credential and request decisions inline. Only add broker for optional event batching, report generation, or expensive background refresh work users can inspect. |
+| Pure example or tree subcommands | `conda-tree`, `random-walk`, `conda-random-subcommand` | Do nothing unless profiling shows repeated commands need a warm helper process. |
 | Browser/runtime-specific plugins | `conda-wasm` | Treat broker as host-only. Do not assume it exists inside restricted runtimes such as Emscripten. |
 
 ## Keep Broker Optional

@@ -14,15 +14,18 @@ need to inspect and control.
 
 ## Install
 
-```bash
-conda install -c conda-forge conda-broker
-```
-
-During development, run it from the repository:
+`conda-broker` is currently developed from this repository:
 
 ```bash
 pixi install
 pixi run cb status
+```
+
+Once a conda package is published, install it from the chosen channel, for
+example:
+
+```bash
+conda install -c conda-forge conda-broker
 ```
 
 ## Quick Use

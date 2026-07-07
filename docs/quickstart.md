@@ -30,8 +30,8 @@ owned by the user.
 cb start
 ```
 
-`start` launches the broker process and starts enabled services. To start
-only selected services:
+`start` launches the broker process and starts services that are enabled for
+broker startup. To start selected services explicitly:
 
 ```bash
 cb start package-cache

@@ -56,7 +56,7 @@ HealthCheck(type="tcp", endpoint="default", interval_s=5, timeout_s=1)
 HealthCheck(type="http", url="http://127.0.0.1:8765/health")
 ```
 
-HTTP status codes below 500 are considered reachable.
+HTTP status codes from 200 through 499 are considered reachable.
 
 Endpoint-bound HTTP checks use the resolved endpoint URL:
 

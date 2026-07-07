@@ -83,9 +83,19 @@ def configure_broker_parser(parser: argparse.ArgumentParser) -> None:
     _add_common_options(parser)
     sub = parser.add_subparsers(dest="subcmd")
 
-    start_parser = sub.add_parser("start", help="Start the broker and services.")
+    start_parser = sub.add_parser(
+        "start",
+        help="Start the broker or selected services.",
+    )
     _add_common_options(start_parser, suppress_defaults=True)
-    start_parser.add_argument("services", nargs="*", help="Services to start.")
+    start_parser.add_argument(
+        "services",
+        nargs="*",
+        help=(
+            "Services to start. Omit to start the broker and services enabled "
+            "for broker startup."
+        ),
+    )
     start_parser.add_argument(
         "--timeout",
         type=_positive_float,

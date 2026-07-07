@@ -52,5 +52,9 @@ Broker.current().service("package-cache").emit_event(
 )
 ```
 
+When the broker is stopped, events are appended directly to the user runtime
+event file. When it is running, they are delivered through the authenticated
+localhost IPC endpoint.
+
 Events rotate by size into `events.jsonl.1`. Event reads include the rotated
 file before the active file, so recent history remains visible after rotation.

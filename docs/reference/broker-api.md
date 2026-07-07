@@ -3,7 +3,7 @@
 The `Broker` API is for provider plugins and user-facing commands that need
 to inspect or manage broker state.
 
-Query methods do not start the broker:
+These methods do not start the broker:
 
 - `Broker.current()`
 - `Broker.running()`
@@ -24,6 +24,10 @@ Startup methods are explicit:
 - `Broker.service(NAME).wait(start=True)`
 - `Broker.restart()`
 - `Broker.service(NAME).restart()`
+
+`Broker.start()` starts the broker process and any services enabled for
+broker startup. `Broker.start_services()` and `Broker.service(NAME).start()`
+start named services explicitly.
 
 `Broker.service(NAME).wait(start=False)` waits on an already running broker
 and does not start a process by itself.

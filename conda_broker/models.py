@@ -1,4 +1,4 @@
-"""Typed service models shared by providers, clients, and the supervisor."""
+"""Typed service models shared by providers, API users, and the supervisor."""
 
 from __future__ import annotations
 

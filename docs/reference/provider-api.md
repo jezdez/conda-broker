@@ -24,7 +24,8 @@ validated service catalog.
 
 - `process`: child process is still alive.
 - `tcp`: broker can open a TCP connection to `host` and `port`.
-- `http`: broker can fetch `url`; status codes below 500 are healthy.
+- `http`: broker can fetch `url`; status codes from 200 through 499 are
+  healthy.
 - `exec`: command exits with status code zero before `timeout_s`.
 
 Each check runs every `interval_s` seconds while the service is running.
