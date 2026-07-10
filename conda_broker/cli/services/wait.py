@@ -3,17 +3,18 @@
 from __future__ import annotations
 
 from ... import Broker
-from .common import emit_payload, paths_from_args
+from ...paths import ServicePaths
+from .common import BrokerConsole
 
 
 def execute_wait(args, *, console=None) -> int:
     payload = (
-        Broker.current(paths_from_args(args))
+        Broker.current(ServicePaths.resolve(args.runtime_dir, args.log_dir))
         .service(args.service)
         .wait(timeout_s=args.timeout, start=args.start)
         .to_dict()
     )
-    emit_payload(args, payload, console=console)
+    BrokerConsole(console).emit(args, payload)
     services = payload.get("services")
     if not isinstance(services, list) or not services:
         return 1

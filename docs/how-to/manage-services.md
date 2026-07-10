@@ -38,7 +38,8 @@ cb stop
 
 `cb start` starts the broker and services enabled for broker startup.
 `cb start SERVICE` starts selected services explicitly. `cb stop` without
-names shuts the broker down.
+names shuts the broker down. Stop commands are idempotent: stopping an
+already stopped broker reports `running=false` and succeeds.
 
 For Python scripts that need temporary lifecycle ownership, use the `Broker`
 API context managers:

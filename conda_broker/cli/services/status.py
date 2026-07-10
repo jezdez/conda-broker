@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from ... import Broker
-from .common import emit_payload, paths_from_args
+from ...paths import ServicePaths
+from .common import BrokerConsole
 
 
 def execute_status(args, *, console=None) -> int:
-    payload = Broker.current(paths_from_args(args)).status(args.service).to_dict()
-    emit_payload(args, payload, console=console)
+    paths = ServicePaths.resolve(args.runtime_dir, args.log_dir)
+    payload = Broker.current(paths).status(args.service).to_dict()
+    BrokerConsole(console).emit(args, payload)
     return 0

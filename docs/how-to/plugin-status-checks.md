@@ -18,7 +18,8 @@ status = check.status
 ```
 
 `Service.check()` returns a compact report for plugin CLIs and JSON output.
-It distinguishes a discovered but stopped service from an unknown service:
+When the broker is running, it distinguishes a known stopped service from an
+unknown service:
 
 ```python
 check = Broker.current().service("package-cache").check()
@@ -29,10 +30,14 @@ else:
     use_inline_fallback(reason=check.reason)
 ```
 
-`Service.status()` returns `None` when the named service is not discovered or
-unavailable, so optional integrations can safely fall back. Use
-`Broker.current().status("service-name")` when you want a strict state query
-that errors for unknown services.
+When the broker is stopped, `check()` returns
+`reason="broker-unavailable"` without loading provider entry points. That
+keeps hot-path conda hooks cheap even when many providers are installed.
+
+`Service.status()` returns `None` when the service or broker is unavailable,
+so optional integrations can safely fall back. Use
+`Broker.current().status("service-name")` when you explicitly want provider
+discovery and a strict query that errors for unknown services.
 
 For services that expose a local API, check readiness and read the endpoint:
 
@@ -74,7 +79,8 @@ with Broker.current().service("package-cache").started(wait=True) as service:
 
 The context manager stops the service on exit only when it started the
 service on entry. If it had to start the broker too, it stops that broker on
-exit as well.
+exit as well. With `wait=True`, failure to reach readiness raises
+`ServiceNotReadyError` after cleanup.
 
 Use startup calls in user-visible commands, not in hooks that run for every
 conda invocation.

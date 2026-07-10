@@ -7,6 +7,8 @@ starting or supervising a helper process.
 ## Service Spec
 
 ```python
+import sys
+
 from conda_broker.hookspec import hookimpl
 from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 
@@ -33,7 +35,7 @@ def conda_broker_services():
             timeout_s=2,
         ),
         process=ProcessSpec(
-            argv=("python", "-m", "conda_package_cache", "--serve"),
+            argv=(sys.executable, "-m", "conda_package_cache", "--serve"),
             env={"PYTHONUNBUFFERED": "1"},
             grace_period_s=15,
         ),

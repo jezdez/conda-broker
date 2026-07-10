@@ -1,4 +1,4 @@
-"""Standalone CLI entry point for ``conda-broker``."""
+"""Standalone CLI entry point for ``cb``."""
 
 from __future__ import annotations
 

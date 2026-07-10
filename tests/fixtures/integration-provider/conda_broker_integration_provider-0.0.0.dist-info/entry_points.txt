@@ -1,0 +1,2 @@
+[conda_broker]
+integration-provider = integration_provider.broker

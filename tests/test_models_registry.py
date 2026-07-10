@@ -90,12 +90,93 @@ def test_invalid_service_names_raise(name: str) -> None:
 
 
 def test_unsupported_runtime_raises() -> None:
-    with pytest.raises(ValueError, match="Unknown runtime"):
+    service = CondaService(
+        name="containerized",
+        summary="Future runtime",
+        source="tests",
+        runtime="docker",
+    )
+
+    assert service.runtime == "docker"
+    assert service.process is None
+
+
+def test_invalid_runtime_name_raises() -> None:
+    with pytest.raises(ValueError, match="Invalid runtime name"):
         CondaService(
             name="containerized",
             summary="Future runtime",
             source="tests",
-            runtime="docker",
+            runtime="docker runtime",
+        )
+
+
+def test_process_rejects_unknown_stop_signal() -> None:
+    with pytest.raises(ValueError, match="Unknown process stop signal"):
+        ProcessSpec(argv=("python", "-V"), stop_signal="NOT_A_SIGNAL")
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), 0, -1])
+def test_health_check_rejects_invalid_intervals(value: float) -> None:
+    with pytest.raises(ValueError, match="interval"):
+        HealthCheck(interval_s=value)
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), 0, -1])
+def test_process_rejects_invalid_grace_period(value: float) -> None:
+    with pytest.raises(ValueError, match="grace period"):
+        ProcessSpec(argv=("python", "-V"), grace_period_s=value)
+
+
+def test_process_rejects_invalid_environment_name() -> None:
+    with pytest.raises(ValueError, match="environment variable name"):
+        ProcessSpec(argv=("python", "-V"), env={"BAD=NAME": "value"})
+
+
+def test_service_rejects_colliding_endpoint_environment_names() -> None:
+    with pytest.raises(ValueError, match="unique environment variable names"):
+        CondaService(
+            name="api",
+            summary="API",
+            source="tests",
+            process=ProcessSpec(argv=("python", "-V")),
+            endpoints=(
+                EndpointSpec(name="public-api"),
+                EndpointSpec(name="public_api"),
+            ),
+        )
+
+
+def test_endpoint_url_brackets_ipv6_host() -> None:
+    endpoint = EndpointSpec(protocol="http", host="::1", port=8000, path="/health")
+
+    assert endpoint.resolve().url == "http://[::1]:8000/health"
+
+
+def test_service_rejects_custom_endpoint_environment_collisions() -> None:
+    with pytest.raises(ValueError, match="conflict with broker variables"):
+        CondaService(
+            name="api",
+            summary="API",
+            source="tests",
+            process=ProcessSpec(argv=("python", "-V")),
+            endpoints=(
+                EndpointSpec(
+                    port_env="CONDA_BROKER_ENDPOINT_DEFAULT_URL",
+                ),
+            ),
+        )
+
+    with pytest.raises(ValueError, match="custom environment names must be unique"):
+        CondaService(
+            name="api",
+            summary="API",
+            source="tests",
+            process=ProcessSpec(argv=("python", "-V")),
+            endpoints=(
+                EndpointSpec(name="api", port_env="PORT"),
+                EndpointSpec(name="metrics", port_env="PORT"),
+            ),
         )
 
 
@@ -165,6 +246,28 @@ def test_registry_rejects_dependency_cycles() -> None:
         )
 
 
+def test_registry_resolves_startup_order() -> None:
+    database = CondaService(
+        name="database",
+        summary="Database",
+        source="tests",
+        process=ProcessSpec(argv=("python", "-V")),
+    )
+    app = CondaService(
+        name="app",
+        summary="App",
+        source="tests",
+        dependencies=(database.name,),
+        process=ProcessSpec(argv=("python", "-V")),
+    )
+    registry = ServiceRegistry([app, database])
+
+    assert [service.name for service in registry.startup_order([app.name])] == [
+        database.name,
+        app.name,
+    ]
+
+
 def test_registry_is_pluggy_manager() -> None:
     registry = ServiceRegistry()
 
@@ -189,3 +292,95 @@ def test_registry_collects_registered_provider_services() -> None:
 
     assert registry.get_plugin("provider") is not None
     assert registry.names() == ["package-cache"]
+
+
+def test_registry_isolates_failing_providers() -> None:
+    class GoodProvider:
+        @hookimpl
+        def conda_broker_services(self):
+            yield CondaService(
+                name="package-cache",
+                summary="Package metadata cache",
+                source="good-provider",
+                process=ProcessSpec(argv=("python", "-V")),
+            )
+
+    class BadProvider:
+        @hookimpl
+        def conda_broker_services(self):
+            raise RuntimeError("provider failed")
+            yield
+
+    registry = ServiceRegistry()
+    registry.register(BadProvider(), name="bad-provider")
+    registry.register(GoodProvider(), name="good-provider")
+    registry.collect_provider_services()
+
+    assert registry.names() == ["package-cache"]
+    assert registry.provider_errors == [
+        {
+            "provider": "bad-provider",
+            "phase": "services",
+            "error": "provider failed",
+            "error_type": "RuntimeError",
+        }
+    ]
+
+
+def test_registry_quarantines_services_with_invalid_dependencies() -> None:
+    class Provider:
+        @hookimpl
+        def conda_broker_services(self):
+            yield CondaService(
+                name="api",
+                summary="API",
+                source="provider",
+                dependencies=("database",),
+                process=ProcessSpec(argv=("python", "-V")),
+            )
+
+    registry = ServiceRegistry()
+    registry.register(Provider(), name="provider")
+    registry.collect_provider_services()
+
+    assert registry.names() == []
+    assert registry.provider_errors[0]["provider"] == "provider"
+    assert registry.provider_errors[0]["phase"] == "dependencies"
+    assert "unknown service" in registry.provider_errors[0]["error"]
+
+
+def test_registry_duplicate_does_not_remove_first_provider() -> None:
+    class FirstProvider:
+        @hookimpl
+        def conda_broker_services(self):
+            yield CondaService(
+                name="shared",
+                summary="First",
+                source="first",
+                process=ProcessSpec(argv=("python", "-V")),
+            )
+
+    class SecondProvider:
+        @hookimpl
+        def conda_broker_services(self):
+            yield CondaService(
+                name="temporary",
+                summary="Rolled back",
+                source="second",
+                process=ProcessSpec(argv=("python", "-V")),
+            )
+            yield CondaService(
+                name="shared",
+                summary="Duplicate",
+                source="second",
+                process=ProcessSpec(argv=("python", "-V")),
+            )
+
+    registry = ServiceRegistry()
+    registry.register(SecondProvider(), name="z-second")
+    registry.register(FirstProvider(), name="a-first")
+    registry.collect_provider_services()
+
+    assert registry.names() == ["shared"]
+    assert registry.get("shared").source == "first"
+    assert registry.provider_errors[0]["provider"] == "z-second"

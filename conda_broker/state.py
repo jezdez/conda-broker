@@ -7,7 +7,6 @@ import threading
 from collections import deque
 from typing import TYPE_CHECKING
 
-from .files import atomic_write_json, file_lock, restrict_permissions, rotate_file
 from .models import ServiceEvent
 
 if TYPE_CHECKING:
@@ -31,19 +30,19 @@ class StateStore:
 
     def enabled_services(self) -> set[str]:
         with self._lock:
-            with file_lock(self.paths.state_lock_file):
+            with self.paths.lock(self.paths.state_lock_file):
                 return self._read_enabled()
 
     def set_enabled(self, services: Iterable[str], enabled: bool) -> set[str]:
         with self._lock:
-            with file_lock(self.paths.state_lock_file):
+            with self.paths.lock(self.paths.state_lock_file):
                 current = self._read_enabled()
                 for service in services:
                     if enabled:
                         current.add(service)
                     else:
                         current.discard(service)
-                atomic_write_json(
+                self.paths.write_json(
                     self.paths.enabled_file,
                     {"enabled": sorted(current)},
                 )
@@ -53,6 +52,37 @@ class StateStore:
         if self.paths.enabled_file.exists():
             return
         self.set_enabled(services, True)
+
+    def managed_processes(self) -> dict[str, dict[str, Any]]:
+        """Return process identities persisted by the broker."""
+        with self._lock:
+            with self.paths.lock(self.paths.state_lock_file):
+                return self._read_managed_processes()
+
+    def set_managed_process(
+        self,
+        service: str,
+        process: dict[str, Any] | None,
+        *,
+        instance_id: str | None = None,
+    ) -> None:
+        """Persist or clear one service process identity."""
+        with self._lock:
+            with self.paths.lock(self.paths.state_lock_file):
+                current = self._read_managed_processes()
+                if process is not None:
+                    current[service] = dict(process)
+                else:
+                    existing = current.get(service)
+                    if existing is None:
+                        return
+                    if instance_id and existing.get("instance_id") != instance_id:
+                        return
+                    current.pop(service, None)
+                self.paths.write_json(
+                    self.paths.processes_file,
+                    {"processes": current},
+                )
 
     def emit(
         self,
@@ -70,16 +100,19 @@ class StateStore:
         )
         line = json.dumps(event.to_dict(), sort_keys=True)
         with self._lock:
-            with file_lock(self.paths.state_lock_file):
-                rotate_file(self.paths.events_file, max_bytes=self.max_event_bytes)
+            with self.paths.lock(self.paths.state_lock_file):
+                self.paths.rotate(
+                    self.paths.events_file,
+                    max_bytes=self.max_event_bytes,
+                )
                 with self.paths.events_file.open("a", encoding="utf-8") as stream:
-                    restrict_permissions(self.paths.events_file)
+                    self.paths.secure(self.paths.events_file)
                     stream.write(line + "\n")
         return event
 
     def read_events(self, *, limit: int | None = None) -> list[dict[str, Any]]:
         with self._lock:
-            with file_lock(self.paths.state_lock_file):
+            with self.paths.lock(self.paths.state_lock_file):
                 return self._read_events_unlocked(
                     self._event_paths(),
                     limit=limit,
@@ -93,10 +126,31 @@ class StateStore:
             data = json.loads(path.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
             return set()
+        if not isinstance(data, dict):
+            return set()
         enabled = data.get("enabled", [])
         if not isinstance(enabled, list):
             return set()
         return {str(item) for item in enabled}
+
+    def _read_managed_processes(self) -> dict[str, dict[str, Any]]:
+        path = self.paths.processes_file
+        if not path.exists():
+            return {}
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        processes = data.get("processes")
+        if not isinstance(processes, dict):
+            return {}
+        return {
+            str(name): dict(process)
+            for name, process in processes.items()
+            if isinstance(process, dict)
+        }
 
     @staticmethod
     def _read_events_unlocked(
@@ -116,7 +170,8 @@ class StateStore:
                         row = json.loads(line)
                     except json.JSONDecodeError:
                         continue
-                    rows.append(row)
+                    if isinstance(row, dict):
+                        rows.append(row)
         return list(rows)
 
     def _event_paths(self) -> list[Path]:

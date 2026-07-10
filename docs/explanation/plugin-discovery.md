@@ -21,4 +21,12 @@ registry.get("package-cache")
 registry.enabled_defaults()
 ```
 
-Duplicate names are rejected so users can address services predictably.
+Providers are called independently. A provider that fails to import, raises
+from its hook, returns invalid objects, or conflicts with an earlier service
+does not prevent healthy providers from loading. Services with missing or
+cyclic dependencies are removed from the usable registry. Details remain
+visible through `provider_errors` in `cb list --json` and `cb doctor`.
+
+Provider order is deterministic by entry-point name. The first provider for
+a service name wins; the conflicting provider is quarantined so users can
+address the surviving service predictably.

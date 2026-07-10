@@ -1,0 +1,2 @@
+[conda_broker]
+demo-provider = demo_provider.broker

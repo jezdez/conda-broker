@@ -10,5 +10,5 @@ Set Theme "Dark+"
 Set TypingSpeed 40ms
 Set WaitTimeout 120s
 
-Env DEMO_PS1 "\[\e[1;38;2;67;176;42m\]$\[\e[0m\] "
+Env PS1 "\[\e[1;38;2;67;176;42m\]$\[\e[0m\] "
 Env PYTHONWARNINGS "ignore"

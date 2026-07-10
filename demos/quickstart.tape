@@ -1,22 +1,6 @@
 Source demos/_settings.tape
 
 Output demos/quickstart.gif
-Output demos/quickstart.mp4
-
-Hide
-Type `eval "$(pixi shell-hook -s bash -e dev)"`
-Enter
-Wait /\)/
-Type `export PS1="$DEMO_PS1" && export CONDA_BROKER_RUNTIME_DIR=/tmp/conda-broker-demo-quickstart/runtime && export CONDA_BROKER_LOG_DIR=/tmp/conda-broker-demo-quickstart/logs && rm -rf /tmp/conda-broker-demo-quickstart && python -m pip install -q -e demos/fixtures/demo-provider`
-Enter
-Wait /\$/
-Type `cb stop >/dev/null 2>&1 || true`
-Enter
-Wait /\$/
-Type "clear"
-Enter
-Wait /\$/
-Show
 
 Type "# Discover broker services"
 Enter
@@ -26,18 +10,18 @@ Enter
 Wait /\$/
 Sleep 1s
 
-Type "# Enable and start a service"
+Type "# Enable a service for broker startup"
 Enter
 Sleep 500ms
-Type@80ms "cb enable heartbeat --start"
+Type@80ms "cb enable heartbeat"
 Enter
 Wait /\$/
 Sleep 1s
 
-Type "# Inspect service readiness"
+Type "# Start the service and wait for readiness"
 Enter
 Sleep 500ms
-Type@80ms "cb status heartbeat"
+Type@80ms "cb wait heartbeat --start --timeout 10"
 Enter
 Wait /\$/
 Sleep 1s

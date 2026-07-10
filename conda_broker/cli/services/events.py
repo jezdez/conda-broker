@@ -6,34 +6,32 @@ import json
 import time
 
 from ... import Broker
-from .common import emit_payload, paths_from_args, print_event_line
+from ...paths import ServicePaths
+from .common import BrokerConsole
 
 
 def execute_events(args, *, console=None) -> int:
-    broker = Broker.current(paths_from_args(args))
+    broker = Broker.current(ServicePaths.resolve(args.runtime_dir, args.log_dir))
+    output = BrokerConsole(console)
     if not args.follow:
         payload = broker.events(limit=args.lines)
-        emit_payload(args, payload, console=console)
+        output.emit(args, payload)
         return 0
 
     seen: set[str] = set()
     while True:
-        payload = broker.events()
+        payload = broker.events(limit=args.lines)
         events = payload.get("events", [])
         if isinstance(events, list):
             current: set[str] = set()
             for event in events:
-                key = _event_key(event)
+                key = json.dumps(event, sort_keys=True, separators=(",", ":"))
                 current.add(key)
                 if key in seen:
                     continue
                 if args.json:
-                    print(json.dumps(event, sort_keys=True))
+                    output.json_line(event)
                 else:
-                    print_event_line(event, console=console)
+                    output.event(event)
             seen = current
         time.sleep(1.0)
-
-
-def _event_key(event: object) -> str:
-    return json.dumps(event, sort_keys=True, separators=(",", ":"))

@@ -24,7 +24,7 @@ validated service catalog.
 
 - `process`: child process is still alive.
 - `tcp`: broker can open a TCP connection to `host` and `port`.
-- `http`: broker can fetch `url`; status codes from 200 through 499 are
+- `http`: broker can fetch `url`; status codes from 200 through 399 are
   healthy.
 - `exec`: command exits with status code zero before `timeout_s`.
 
@@ -57,6 +57,22 @@ environment:
 
 `port_env` and `url_env` add provider-chosen variable names for services that
 already expect simple variables such as `PORT`.
+
+Endpoint names must remain unique after conversion to their uppercase
+environment-variable form. Custom endpoint variable names must also be
+portable, unique, and distinct from broker-owned names.
+
+### Runtimes and Processes
+
+Runtime names are open identifiers so future provider models remain
+discoverable. The installed broker currently activates only
+`runtime="process"`; starting any other runtime raises
+`RuntimeUnavailableError`.
+
+Process services validate their argv, environment names and values, stop
+signal, and grace period when providers are collected. Exec health checks use
+the same merged environment and working directory as the service, plus
+resolved endpoint variables.
 
 ## Registry
 

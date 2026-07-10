@@ -19,6 +19,8 @@ dependencies = ["conda-broker"]
 ## Service Definition
 
 ```python
+import sys
+
 from conda_broker.hookspec import hookimpl
 from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 
@@ -41,7 +43,7 @@ def conda_broker_services():
         ),
         health_check=HealthCheck(type="http", endpoint="default"),
         process=ProcessSpec(
-            argv=("python", "-m", "conda_my_provider.server"),
+            argv=(sys.executable, "-m", "conda_my_provider.server"),
             env={"PYTHONUNBUFFERED": "1"},
             grace_period_s=10,
         ),

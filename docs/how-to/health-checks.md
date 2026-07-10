@@ -56,7 +56,8 @@ HealthCheck(type="tcp", endpoint="default", interval_s=5, timeout_s=1)
 HealthCheck(type="http", url="http://127.0.0.1:8765/health")
 ```
 
-HTTP status codes from 200 through 499 are considered reachable.
+HTTP status codes from 200 through 399 are healthy. Client and server error
+responses are unhealthy.
 
 Endpoint-bound HTTP checks use the resolved endpoint URL:
 
@@ -67,16 +68,23 @@ HealthCheck(type="http", endpoint="default", interval_s=5, timeout_s=1)
 ## Exec Health
 
 ```python
-HealthCheck(type="exec", command=("python", "-m", "my_provider.healthcheck"))
+import sys
+
+HealthCheck(
+    type="exec",
+    command=(sys.executable, "-m", "my_provider.healthcheck"),
+)
 ```
 
 Use exec checks for custom local validation. Keep them fast, deterministic,
 and side-effect-light.
 
-Exec health checks run as local commands from the broker process
-environment. Prefer absolute commands or provider-controlled module
-commands, and keep timeouts short so a stuck health check cannot delay other
-service monitoring.
+Exec health checks inherit the service's merged environment, working
+directory, and broker-injected endpoint variables. They still run as
+separate child commands. Prefer absolute commands or provider-controlled
+module commands, and keep timeouts short. Health check I/O runs outside the
+supervisor state lock, so status queries remain responsive while a check is
+in progress.
 
 ## Startup Period
 

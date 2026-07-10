@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from conda_broker import conformance
+from conda_broker.conformance import ConformanceSuite
 from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 from conda_broker.registry import ServiceRegistry
 
@@ -63,7 +63,7 @@ def test_validate_service_spec_passes() -> None:
     service = _sleeping_service("sleeper")
     registry = ServiceRegistry([service])
 
-    result = conformance.validate("sleeper", registry=registry)
+    result = ConformanceSuite(registry).validate("sleeper")
 
     assert result.ok is True
     assert {check.name for check in result.checks} >= {
@@ -78,9 +78,8 @@ def test_run_service_start_stop_captures_logs() -> None:
     service = _sleeping_service("runner")
     registry = ServiceRegistry([service])
 
-    result = conformance.run(
+    result = ConformanceSuite(registry).run(
         "runner",
-        registry=registry,
         duration_s=0.1,
         timeout_s=3,
     )
@@ -97,9 +96,8 @@ def test_run_service_checks_declared_endpoints() -> None:
     service = _http_service("api")
     registry = ServiceRegistry([service])
 
-    result = conformance.run(
+    result = ConformanceSuite(registry).run(
         "api",
-        registry=registry,
         duration_s=0.1,
         timeout_s=3,
     )
@@ -122,9 +120,8 @@ def test_run_service_reports_start_failure() -> None:
     )
     registry = ServiceRegistry([service])
 
-    result = conformance.run(
+    result = ConformanceSuite(registry).run(
         "missing-command",
-        registry=registry,
         duration_s=0.1,
         timeout_s=1,
     )
@@ -140,9 +137,8 @@ def test_health_scenario_observes_healthy_service() -> None:
     service = _sleeping_service("healthy")
     registry = ServiceRegistry([service])
 
-    result = conformance.test(
+    result = ConformanceSuite(registry).test(
         "healthy",
-        registry=registry,
         scenario="health",
         timeout_s=3,
     )
@@ -156,9 +152,8 @@ def test_crash_scenario_verifies_restart_policy() -> None:
     service = _sleeping_service("crashy")
     registry = ServiceRegistry([service])
 
-    result = conformance.test(
+    result = ConformanceSuite(registry).test(
         "crashy",
-        registry=registry,
         scenario="crash",
         timeout_s=4,
     )
@@ -174,7 +169,7 @@ def test_report_runs_all_scenarios() -> None:
     service = _sleeping_service("reported")
     registry = ServiceRegistry([service])
 
-    payload = conformance.report("reported", registry=registry, timeout_s=4)
+    payload = ConformanceSuite(registry).report("reported", timeout_s=4)
 
     assert payload["ok"] is True
     assert [result["command"] for result in payload["results"]] == [

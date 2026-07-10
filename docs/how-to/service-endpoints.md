@@ -9,6 +9,8 @@ is not merely alive, it has become usable.
 Use `EndpointSpec` on the service:
 
 ```python
+import sys
+
 from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 
 CondaService(
@@ -26,7 +28,7 @@ CondaService(
     ),
     health_check=HealthCheck(type="http", endpoint="default"),
     process=ProcessSpec(
-        argv=("python", "-m", "conda_my_provider.server"),
+        argv=(sys.executable, "-m", "conda_my_provider.server"),
         env={"PYTHONUNBUFFERED": "1"},
     ),
 )
@@ -46,10 +48,15 @@ Every endpoint receives automatic environment variables:
 - `CONDA_BROKER_ENDPOINT_DEFAULT_URL`
 
 For non-default endpoint names, the endpoint name is uppercased and
-non-alphanumeric characters become underscores.
+non-alphanumeric characters become underscores. Names that collide after
+normalization are rejected, as are duplicate custom variable names or custom
+names that overwrite broker variables.
 
 If `port_env` or `url_env` is configured, the broker also sets those custom
 variables. The example above sets `PORT` and `SERVICE_URL`.
+
+IPv6 endpoint URLs use bracketed hosts, for example
+`http://[::1]:8765/health`.
 
 ## Bind Health Checks to Endpoints
 
@@ -99,6 +106,12 @@ cb endpoint my-provider.api default --json
 Stopped services with static ports can still show endpoint URLs. Stopped
 services with broker-allocated ports show unresolved endpoint fields until
 the service starts.
+
+For one launch, the broker holds socket reservations while allocating all
+dynamic endpoints, which prevents two endpoints from receiving the same
+port. It must release those sockets before the child can bind. Another process
+can still claim a port in that short interval, so services should exit on bind
+failure and let restart policy retry with a new allocation.
 
 ## Query from Another Plugin
 

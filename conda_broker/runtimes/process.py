@@ -9,21 +9,8 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-    from typing import TextIO
 
     from ..models import CondaService
-
-
-def _signal_number(name: str) -> int:
-    upper = name.upper()
-    if not upper.startswith("SIG"):
-        upper = f"SIG{upper}"
-    value = getattr(signal, upper, None)
-    if isinstance(value, signal.Signals):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    return int(signal.SIGTERM)
 
 
 class ProcessRuntime:
@@ -32,10 +19,9 @@ class ProcessRuntime:
     def start(
         self,
         service: CondaService,
-        log_file: TextIO,
         *,
         extra_env: Mapping[str, str] | None = None,
-    ) -> subprocess.Popen[str]:
+    ) -> subprocess.Popen[bytes]:
         spec = service.merged_process()
         env: Mapping[str, str] = {**os.environ, **spec.env, **(extra_env or {})}
         if os.name != "nt":
@@ -43,10 +29,8 @@ class ProcessRuntime:
                 spec.argv,
                 cwd=spec.cwd,
                 env=env,
-                stdout=log_file,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
-                text=True,
-                encoding="utf-8",
                 start_new_session=True,
             )
         creationflags = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
@@ -54,45 +38,65 @@ class ProcessRuntime:
             spec.argv,
             cwd=spec.cwd,
             env=env,
-            stdout=log_file,
+            stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
-            encoding="utf-8",
             creationflags=creationflags,
         )
 
-    def stop(self, process: subprocess.Popen[str], service: CondaService) -> None:
-        if process.poll() is not None:
-            return
+    def stop(self, process: subprocess.Popen[bytes], service: CondaService) -> None:
         spec = service.merged_process()
         if os.name != "nt":
             try:
-                os.killpg(os.getpgid(process.pid), _signal_number(spec.stop_signal))
+                os.killpg(process.pid, spec.signal_number)
                 return
             except ProcessLookupError:
                 return
+        if process.poll() is not None:
+            return
         if spec.stop_signal.upper() in {"BREAK", "CTRL_BREAK_EVENT", "SIGBREAK"}:
             try:
-                process.send_signal(signal.CTRL_BREAK_EVENT)
+                process.send_signal(spec.signal_number)
                 return
             except (AttributeError, ValueError, OSError):
                 pass
+        if self.taskkill(process.pid, force=False):
+            return
         process.terminate()
 
-    def kill(self, process: subprocess.Popen[str]) -> None:
-        if process.poll() is not None:
-            return
+    def kill(self, process: subprocess.Popen[bytes]) -> None:
         if os.name != "nt":
             try:
-                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                os.killpg(process.pid, signal.SIGKILL)
                 return
             except ProcessLookupError:
                 return
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+        if process.poll() is not None:
+            return
+        self.taskkill(process.pid, force=True)
+        if process.poll() is None:
+            process.kill()
+
+    def is_active(self, process: subprocess.Popen[bytes]) -> bool:
+        """Return whether the managed process tree is still present."""
+        if os.name == "nt":
+            return process.poll() is None
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+    @staticmethod
+    def taskkill(pid: int, *, force: bool) -> bool:
+        command = ["taskkill", "/PID", str(pid), "/T"]
+        if force:
+            command.append("/F")
+        result = subprocess.run(
+            command,
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        if process.poll() is None:
-            process.kill()
+        return result.returncode == 0

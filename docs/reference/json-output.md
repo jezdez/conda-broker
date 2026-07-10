@@ -10,8 +10,7 @@ automation and remains separate from Rich human output.
 ```json
 {
   "broker": {
-    "running": true,
-    "started": false
+    "running": true
   },
   "services": [
     {
@@ -43,6 +42,12 @@ automation and remains separate from Rich human output.
 }
 ```
 
+`cb start SERVICE --json` uses the same status rows and adds two ownership
+fields: `broker.started` says whether this command launched the broker, and
+the top-level `started` list contains requested services newly launched by
+this call. Context managers use those fields to avoid stopping pre-existing
+work.
+
 ## List
 
 ```json
@@ -55,6 +60,17 @@ automation and remains separate from Rich human output.
       "runtime": "process",
       "start_policy": "manual",
       "restart_policy": "on-failure",
+      "health_check": {
+        "type": "http",
+        "interval_s": 30.0,
+        "timeout_s": 5.0,
+        "start_period_s": 5.0,
+        "endpoint": "default",
+        "command": [],
+        "host": null,
+        "port": null,
+        "url": null
+      },
       "endpoints": [
         {
           "name": "default",
@@ -65,12 +81,26 @@ automation and remains separate from Rich human output.
           "port_env": "CONDA_PACKAGE_CACHE_PORT",
           "url_env": null
         }
-      ]
+      ],
+      "dependencies": [],
+      "env": {},
+      "cwd": null,
+      "process": {
+        "argv": ["python", "-m", "conda_package_cache", "--serve"],
+        "env": {},
+        "cwd": null,
+        "stop_signal": "TERM",
+        "grace_period_s": 5.0
+      }
     }
   ],
-  "enabled": ["package-cache"]
+  "enabled": ["package-cache"],
+  "provider_errors": []
 }
 ```
+
+Provider failures do not suppress healthy services. Each `provider_errors`
+entry reports `provider`, `phase`, `error`, and `error_type`.
 
 ## Endpoint
 
@@ -124,3 +154,13 @@ the envelope has `ready: true`.
 `cb dev validate`, `cb dev run`, and `cb dev test` return one
 `conformance` object. `cb dev report` returns a report object with a
 `results` list. See [](dev-harness.md) for the full shape.
+
+## Errors
+
+Commands that fail with a broker-domain error and `--json` emit:
+
+```json
+{"error": "Unknown service: missing", "ok": false}
+```
+
+They also exit non-zero.

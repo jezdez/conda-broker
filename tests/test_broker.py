@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import os
 import sys
-import time
 from typing import TYPE_CHECKING
 
 import pytest
 
-from conda_broker import broker as broker_module
-from conda_broker.broker import BrokerServer
+from conda_broker.broker import BrokerLease, BrokerServer
 from conda_broker.exceptions import IpcAuthError, UnknownServiceError
 from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 from conda_broker.registry import ServiceRegistry
@@ -74,7 +72,11 @@ def test_dispatch_endpoint_reports_static_endpoint(
     service_paths: ServicePaths,
 ) -> None:
     registry = ServiceRegistry([_sleeping_service()])
-    monkeypatch.setattr(broker_module, "discover_services", lambda: registry)
+    monkeypatch.setattr(
+        ServiceRegistry,
+        "discover",
+        classmethod(lambda cls: registry),
+    )
     broker = BrokerServer(service_paths)
 
     payload = broker.dispatch(
@@ -93,7 +95,11 @@ def test_dispatch_wait_service_reports_ready(
     service_paths: ServicePaths,
 ) -> None:
     registry = ServiceRegistry([_sleeping_service()])
-    monkeypatch.setattr(broker_module, "discover_services", lambda: registry)
+    monkeypatch.setattr(
+        ServiceRegistry,
+        "discover",
+        classmethod(lambda cls: registry),
+    )
     broker = BrokerServer(service_paths)
 
     try:
@@ -132,45 +138,57 @@ def test_dispatch_rejects_unknown_service_enable(service_paths: ServicePaths) ->
     assert StateStore(service_paths).enabled_services() == set()
 
 
-def test_stale_pid_lock_is_recovered(service_paths: ServicePaths) -> None:
-    service_paths.pid_file.write_text("999999999\n", encoding="utf-8")
-    service_paths.lock_file.write_text("999999999\n", encoding="utf-8")
-    broker = BrokerServer(service_paths)
+def test_unheld_stale_lock_is_recovered(service_paths: ServicePaths) -> None:
+    service_paths.lock_file.write_text("stale\n", encoding="utf-8")
+    lease = BrokerLease(service_paths, "current")
 
     try:
-        broker._acquire_lock()
+        lease.acquire()
 
         assert service_paths.lock_file.exists()
-        assert service_paths.lock_file.read_text(encoding="utf-8").strip()
+        assert lease.instance_id in service_paths.lock_file.read_text(encoding="utf-8")
     finally:
-        broker._cleanup_files()
+        lease.release()
+
+    assert service_paths.lock_file.exists()
 
 
-def test_live_non_broker_stale_lock_is_recovered(service_paths: ServicePaths) -> None:
-    service_paths.pid_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
-    service_paths.lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
-    old = time.time() - 60
-    os.utime(service_paths.lock_file, (old, old))
-    broker = BrokerServer(service_paths)
-
-    try:
-        broker._acquire_lock()
-
-        assert service_paths.lock_file.exists()
-        assert "runtime_dir" in service_paths.lock_file.read_text(encoding="utf-8")
-    finally:
-        broker._cleanup_files()
-
-
-def test_fresh_live_lock_is_treated_as_starting_broker(
-    service_paths: ServicePaths,
-) -> None:
-    service_paths.pid_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
-    service_paths.lock_file.write_text(f"{os.getpid()}\n", encoding="utf-8")
-    broker = BrokerServer(service_paths)
+def test_held_lock_prevents_second_broker(service_paths: ServicePaths) -> None:
+    lock = service_paths.lock(service_paths.lock_file, blocking=False).acquire()
+    lease = BrokerLease(service_paths, "current")
 
     try:
         with pytest.raises(SystemExit):
-            broker._acquire_lock()
+            lease.acquire()
     finally:
-        broker._cleanup_files()
+        lock.release()
+        lease.release()
+
+
+def test_cleanup_does_not_remove_successor_metadata(
+    service_paths: ServicePaths,
+) -> None:
+    old = BrokerLease(service_paths, "old")
+    new = BrokerLease(service_paths, "new")
+    old.acquire()
+    assert old.lock is not None
+    old.lock.release()
+    old.lock = None
+
+    new.acquire()
+    service_paths.write_json(
+        service_paths.pid_file,
+        {"pid": os.getpid(), "instance_id": new.instance_id},
+    )
+    service_paths.write_json(
+        service_paths.server_file,
+        {"instance_id": new.instance_id},
+    )
+
+    try:
+        old.release()
+
+        assert service_paths.pid_file.exists()
+        assert service_paths.server_file.exists()
+    finally:
+        new.release()

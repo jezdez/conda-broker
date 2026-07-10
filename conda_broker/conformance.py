@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from .paths import ServicePaths
-from .registry import discover_services
+from .registry import ServiceRegistry
 from .state import StateStore
 from .supervisor import ServiceSupervisor
 
@@ -25,7 +25,6 @@ if TYPE_CHECKING:
     from typing import Any
 
     from .models import CondaService, ServiceStatus
-    from .registry import ServiceRegistry
 
 SCENARIOS = {"start-stop", "health", "crash"}
 
@@ -94,632 +93,569 @@ class ConformanceResult:
         }
 
 
-def validate(
-    service_name: str,
-    *,
-    registry: ServiceRegistry | None = None,
-) -> ConformanceResult:
-    """Run static provider conformance checks for one service."""
-    resolved_registry = registry or discover_services()
-    service = resolved_registry.get(service_name)
-    result = ConformanceResult(service=service.name, command="validate")
-    _validate_service(service, resolved_registry, result)
-    return result
+@dataclass
+class ServiceValidation:
+    """Static checks for one discovered service."""
 
+    service: CondaService
+    registry: ServiceRegistry
+    result: ConformanceResult
 
-def run(
-    service_name: str,
-    *,
-    registry: ServiceRegistry | None = None,
-    duration_s: float = 3.0,
-    timeout_s: float = 5.0,
-    keep: bool = False,
-) -> ConformanceResult:
-    """Run one service briefly in an isolated broker workspace."""
-    resolved_registry = registry or discover_services()
-    service = resolved_registry.get(service_name)
-    with _workspace(keep=keep) as (root, paths):
-        result = ConformanceResult(
-            service=service.name,
-            command="run",
-            scenario="start-stop",
-            workspace=str(root),
-            kept=keep,
-        )
-        _validate_service(service, resolved_registry, result)
-        _scenario_start_stop(
-            service.name,
-            resolved_registry,
-            paths,
-            result,
-            timeout_s=timeout_s,
-            observe_s=duration_s,
-        )
-        return result
-
-
-def test(
-    service_name: str,
-    *,
-    registry: ServiceRegistry | None = None,
-    scenario: str = "start-stop",
-    timeout_s: float = 5.0,
-    keep: bool = False,
-) -> ConformanceResult:
-    """Run one conformance scenario for a service in an isolated workspace."""
-    if scenario not in SCENARIOS:
-        raise ValueError(f"Unknown conformance scenario: {scenario}")
-    resolved_registry = registry or discover_services()
-    service = resolved_registry.get(service_name)
-    with _workspace(keep=keep) as (root, paths):
-        result = ConformanceResult(
-            service=service.name,
-            command="test",
-            scenario=scenario,
-            workspace=str(root),
-            kept=keep,
-        )
-        _validate_service(service, resolved_registry, result)
-        if scenario == "start-stop":
-            _scenario_start_stop(
-                service.name,
-                resolved_registry,
-                paths,
-                result,
-                timeout_s=timeout_s,
-            )
-        elif scenario == "health":
-            _scenario_health(
-                service.name,
-                resolved_registry,
-                paths,
-                result,
-                timeout_s=timeout_s,
-            )
+    def run(self) -> None:
+        service = self.service
+        self.result.add("pass", "service.discovered", "service is discoverable")
+        if service.summary.strip():
+            self.result.add("pass", "service.summary", "summary is present")
         else:
-            _scenario_crash(
-                service.name,
-                resolved_registry,
-                paths,
-                result,
-                timeout_s=timeout_s,
-            )
-        return result
+            self.result.add("warn", "service.summary", "summary is empty")
 
-
-def report(
-    service_name: str,
-    *,
-    registry: ServiceRegistry | None = None,
-    timeout_s: float = 5.0,
-    keep: bool = False,
-) -> dict[str, object]:
-    """Run the complete provider conformance report for one service."""
-    resolved_registry = registry or discover_services()
-    service = resolved_registry.get(service_name)
-    results: list[ConformanceResult] = [
-        validate(service.name, registry=resolved_registry),
-        run(
-            service.name,
-            registry=resolved_registry,
-            duration_s=min(timeout_s, 3.0),
-            timeout_s=timeout_s,
-            keep=keep,
-        ),
-    ]
-    for scenario in ("health", "crash"):
-        results.append(
-            test(
-                service.name,
-                registry=resolved_registry,
-                scenario=scenario,
-                timeout_s=timeout_s,
-                keep=keep,
-            )
-        )
-    return {
-        "ok": all(result.ok for result in results),
-        "service": service.name,
-        "command": "report",
-        "results": [result.to_dict() for result in results],
-    }
-
-
-def _validate_service(
-    service: CondaService,
-    registry: ServiceRegistry,
-    result: ConformanceResult,
-) -> None:
-    result.add("pass", "service.discovered", "service is discoverable")
-    if service.summary.strip():
-        result.add("pass", "service.summary", "summary is present")
-    else:
-        result.add("warn", "service.summary", "summary is empty")
-
-    if service.runtime == "process":
-        result.add("pass", "runtime.process", "process runtime is supported")
-    else:
-        result.add(
-            "fail",
-            "runtime.supported",
-            f"runtime {service.runtime!r} is not supported by this broker",
-        )
-        return
-
-    process = service.merged_process()
-    result.add(
-        "pass",
-        "process.argv",
-        "process argv is configured",
-        argv=list(process.argv),
-    )
-    _check_command("process.command", process.argv, result)
-
-    if process.cwd is None:
-        result.add("pass", "process.cwd", "service does not require a cwd")
-    elif Path(process.cwd).exists():
-        result.add("pass", "process.cwd", "configured cwd exists", cwd=process.cwd)
-    else:
-        result.add(
-            "fail",
-            "process.cwd",
-            "configured cwd does not exist",
-            cwd=process.cwd,
-        )
-
-    if process.grace_period_s <= 30:
-        result.add(
-            "pass",
-            "process.grace_period",
-            "grace period is operator-friendly",
-            seconds=process.grace_period_s,
-        )
-    else:
-        result.add(
-            "warn",
-            "process.grace_period",
-            "long grace periods slow down stop and restart workflows",
-            seconds=process.grace_period_s,
-        )
-
-    for dependency in service.dependencies:
-        if dependency in registry:
-            result.add(
-                "pass",
-                "dependency.known",
-                f"dependency {dependency!r} is discoverable",
-                dependency=dependency,
-            )
-        else:
-            result.add(
+        if service.runtime != "process":
+            self.result.add(
                 "fail",
-                "dependency.known",
-                f"dependency {dependency!r} is missing",
-                dependency=dependency,
+                "runtime.supported",
+                f"runtime {service.runtime!r} is not supported by this broker",
             )
+            return
+        self.result.add("pass", "runtime.process", "process runtime is supported")
 
-    _validate_health_check(service, result)
-    _validate_endpoints(service, result)
-
-
-def _validate_health_check(service: CondaService, result: ConformanceResult) -> None:
-    check = service.health_check
-    result.add(
-        "pass",
-        "health.type",
-        f"{check.type} health check is configured",
-        type=check.type,
-    )
-    if check.timeout_s <= service.merged_process().grace_period_s:
-        result.add(
+        process = service.merged_process()
+        self.result.add(
             "pass",
-            "health.timeout",
-            "health timeout is bounded by the stop grace period",
-            timeout_s=check.timeout_s,
+            "process.argv",
+            "process argv is configured",
+            argv=list(process.argv),
         )
-    else:
-        result.add(
-            "warn",
-            "health.timeout",
-            "health timeout is longer than the stop grace period",
-            timeout_s=check.timeout_s,
-            grace_period_s=service.merged_process().grace_period_s,
-        )
+        self.command("process.command", process.argv)
 
-    if check.endpoint:
-        result.add(
-            "pass",
-            "health.endpoint",
-            f"health check uses endpoint {check.endpoint!r}",
-            endpoint=check.endpoint,
-        )
-
-    if check.type == "exec":
-        _check_command("health.exec.command", check.command, result)
-    elif check.type == "tcp" and check.endpoint:
-        return
-    elif check.type == "tcp" and check.host is not None:
-        _check_loopback_host("health.tcp.host", check.host, result)
-    elif check.type == "http" and check.endpoint:
-        return
-    elif check.type == "http" and check.url is not None:
-        host = urlparse(check.url).hostname or ""
-        _check_loopback_host("health.http.host", host, result)
-
-
-def _validate_endpoints(service: CondaService, result: ConformanceResult) -> None:
-    if not service.endpoints:
-        result.add("skip", "endpoint.declared", "service declares no endpoints")
-        return
-    for endpoint in service.endpoints:
-        result.add(
-            "pass",
-            "endpoint.declared",
-            f"endpoint {endpoint.name!r} is declared",
-            endpoint=endpoint.name,
-            protocol=endpoint.protocol,
-        )
-        _check_loopback_host(f"endpoint.{endpoint.name}.host", endpoint.host, result)
-        if endpoint.port is None:
-            result.add(
-                "pass",
-                "endpoint.port",
-                "broker will allocate a dynamic port",
-                endpoint=endpoint.name,
+        if process.cwd is None:
+            self.result.add("pass", "process.cwd", "service does not require a cwd")
+        elif Path(process.cwd).exists():
+            self.result.add(
+                "pass", "process.cwd", "configured cwd exists", cwd=process.cwd
             )
         else:
-            result.add(
-                "pass",
-                "endpoint.port",
-                "endpoint uses a static port",
-                endpoint=endpoint.name,
-                port=endpoint.port,
-            )
-        if endpoint.port_env:
-            result.add(
-                "pass",
-                "endpoint.port_env",
-                "service receives the endpoint port through a custom env var",
-                endpoint=endpoint.name,
-                env=endpoint.port_env,
-            )
-        if endpoint.url_env:
-            result.add(
-                "pass",
-                "endpoint.url_env",
-                "service receives the endpoint URL through a custom env var",
-                endpoint=endpoint.name,
-                env=endpoint.url_env,
+            self.result.add(
+                "fail",
+                "process.cwd",
+                "configured cwd does not exist",
+                cwd=process.cwd,
             )
 
+        if process.grace_period_s <= 30:
+            self.result.add(
+                "pass",
+                "process.grace_period",
+                "grace period is operator-friendly",
+                seconds=process.grace_period_s,
+            )
+        else:
+            self.result.add(
+                "warn",
+                "process.grace_period",
+                "long grace periods slow down stop and restart workflows",
+                seconds=process.grace_period_s,
+            )
 
-def _check_command(
-    name: str,
-    argv: tuple[str, ...],
-    result: ConformanceResult,
-) -> None:
-    executable = argv[0]
-    if _command_exists(executable):
-        result.add("pass", name, "command appears executable", command=executable)
-    else:
-        result.add(
-            "warn",
-            name,
-            "command was not found on PATH or as an absolute path",
-            command=executable,
+        for dependency in service.dependencies:
+            if dependency in self.registry:
+                self.result.add(
+                    "pass",
+                    "dependency.known",
+                    f"dependency {dependency!r} is discoverable",
+                    dependency=dependency,
+                )
+            else:
+                self.result.add(
+                    "fail",
+                    "dependency.known",
+                    f"dependency {dependency!r} is missing",
+                    dependency=dependency,
+                )
+
+        self.health_check()
+        self.endpoints()
+
+    def health_check(self) -> None:
+        check = self.service.health_check
+        process = self.service.merged_process()
+        self.result.add(
+            "pass",
+            "health.type",
+            f"{check.type} health check is configured",
+            type=check.type,
         )
+        if check.timeout_s <= process.grace_period_s:
+            self.result.add(
+                "pass",
+                "health.timeout",
+                "health timeout is bounded by the stop grace period",
+                timeout_s=check.timeout_s,
+            )
+        else:
+            self.result.add(
+                "warn",
+                "health.timeout",
+                "health timeout is longer than the stop grace period",
+                timeout_s=check.timeout_s,
+                grace_period_s=process.grace_period_s,
+            )
 
+        if check.endpoint:
+            self.result.add(
+                "pass",
+                "health.endpoint",
+                f"health check uses endpoint {check.endpoint!r}",
+                endpoint=check.endpoint,
+            )
 
-def _command_exists(command: str) -> bool:
-    path = Path(command)
-    if path.is_absolute() or os.sep in command or (os.altsep and os.altsep in command):
-        return path.exists()
-    return shutil.which(command) is not None
+        if check.type == "exec":
+            self.command("health.exec.command", check.command)
+        elif check.type == "tcp" and not check.endpoint and check.host is not None:
+            self.loopback_host("health.tcp.host", check.host)
+        elif check.type == "http" and not check.endpoint and check.url is not None:
+            self.loopback_host("health.http.host", urlparse(check.url).hostname or "")
 
-
-def _check_loopback_host(
-    name: str,
-    host: str,
-    result: ConformanceResult,
-) -> None:
-    if host == "localhost":
-        result.add("pass", name, "health endpoint is loopback", host=host)
-        return
-    try:
-        if ip_address(host).is_loopback:
-            result.add("pass", name, "health endpoint is loopback", host=host)
+    def endpoints(self) -> None:
+        if not self.service.endpoints:
+            self.result.add(
+                "skip", "endpoint.declared", "service declares no endpoints"
+            )
             return
-    except ValueError:
-        pass
-    result.add(
-        "warn",
-        name,
-        "health endpoint is not obviously loopback",
-        host=host,
-    )
+
+        for endpoint in self.service.endpoints:
+            self.result.add(
+                "pass",
+                "endpoint.declared",
+                f"endpoint {endpoint.name!r} is declared",
+                endpoint=endpoint.name,
+                protocol=endpoint.protocol,
+            )
+            self.loopback_host(f"endpoint.{endpoint.name}.host", endpoint.host)
+            if endpoint.port is None:
+                self.result.add(
+                    "pass",
+                    "endpoint.port",
+                    "broker will allocate a dynamic port",
+                    endpoint=endpoint.name,
+                )
+            else:
+                self.result.add(
+                    "pass",
+                    "endpoint.port",
+                    "endpoint uses a static port",
+                    endpoint=endpoint.name,
+                    port=endpoint.port,
+                )
+            if endpoint.port_env:
+                self.result.add(
+                    "pass",
+                    "endpoint.port_env",
+                    "service receives the endpoint port through a custom env var",
+                    endpoint=endpoint.name,
+                    env=endpoint.port_env,
+                )
+            if endpoint.url_env:
+                self.result.add(
+                    "pass",
+                    "endpoint.url_env",
+                    "service receives the endpoint URL through a custom env var",
+                    endpoint=endpoint.name,
+                    env=endpoint.url_env,
+                )
+
+    def command(self, name: str, argv: tuple[str, ...]) -> None:
+        executable = argv[0]
+        path = Path(executable)
+        explicit_path = (
+            path.is_absolute()
+            or os.sep in executable
+            or (os.altsep is not None and os.altsep in executable)
+        )
+        exists = (
+            path.exists() if explicit_path else shutil.which(executable) is not None
+        )
+        if exists:
+            self.result.add(
+                "pass", name, "command appears executable", command=executable
+            )
+        else:
+            self.result.add(
+                "warn",
+                name,
+                "command was not found on PATH or as an absolute path",
+                command=executable,
+            )
+
+    def loopback_host(self, name: str, host: str) -> None:
+        if host == "localhost":
+            loopback = True
+        else:
+            try:
+                loopback = ip_address(host).is_loopback
+            except ValueError:
+                loopback = False
+        if loopback:
+            self.result.add("pass", name, "health endpoint is loopback", host=host)
+        else:
+            self.result.add(
+                "warn",
+                name,
+                "health endpoint is not obviously loopback",
+                host=host,
+            )
 
 
-def _scenario_start_stop(
-    service_name: str,
-    registry: ServiceRegistry,
-    paths: ServicePaths,
-    result: ConformanceResult,
-    *,
-    timeout_s: float,
-    observe_s: float = 0.0,
-) -> None:
-    state = StateStore(paths)
-    supervisor = ServiceSupervisor(registry, state, paths)
-    service = registry.get(service_name)
-    stopped = None
-    try:
+@dataclass
+class ConformanceScenario:
+    """One service running in an isolated broker workspace."""
+
+    service: CondaService
+    registry: ServiceRegistry
+    paths: ServicePaths
+    result: ConformanceResult
+    timeout_s: float
+    state: StateStore = field(init=False)
+    supervisor: ServiceSupervisor = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.state = StateStore(self.paths)
+        self.supervisor = ServiceSupervisor(self.registry, self.state, self.paths)
+
+    def run(self, *, observe_s: float = 0.0) -> None:
         try:
-            status = _start_and_observe(supervisor, service_name, timeout_s=timeout_s)
-        except Exception as exc:
-            result.add(
-                "fail",
-                "runtime.start",
-                "service failed to start",
-                error=str(exc),
-                error_type=type(exc).__name__,
-            )
+            if self.result.scenario == "start-stop":
+                self.start_stop(observe_s)
+            elif self.result.scenario == "health":
+                self.health()
+            else:
+                self.crash()
+        finally:
+            stopped = []
+            try:
+                stopped = self.supervisor.stop_services()
+            finally:
+                self.result.events = self.state.read_events(limit=50)
+                self.result.logs = self.supervisor.logs.read_lines(
+                    self.service.name, lines=20
+                )
+            if self.result.scenario == "start-stop":
+                if self.result.logs:
+                    self.result.add("pass", "logs.capture", "service wrote log output")
+                else:
+                    self.result.add("warn", "logs.capture", "service log is empty")
+                if stopped and not stopped[0].running:
+                    self.result.add("pass", "runtime.stop", "service stopped cleanly")
+
+    def start_stop(self, observe_s: float) -> None:
+        status = self.start("runtime.start", "service failed to start")
+        if status is None:
             return
-        result.status = status.to_dict()
+        self.result.status = status.to_dict()
         if status.running:
-            result.add("pass", "runtime.start", "service started", pid=status.pid)
-            _check_status_endpoints(status, service, result)
+            self.result.add("pass", "runtime.start", "service started", pid=status.pid)
+            self.check_endpoints(status)
         else:
-            result.add(
+            self.result.add(
                 "fail",
                 "runtime.start",
                 "service did not remain running",
                 state=status.state,
                 exit_code=status.exit_code,
             )
-        if observe_s > 0:
-            _observe(supervisor, observe_s)
-        lines = supervisor.logs.read_lines(service_name, lines=20)
-        result.logs = lines
-        if lines:
-            result.add("pass", "logs.capture", "service wrote log output")
-        else:
-            result.add("warn", "logs.capture", "service log is empty")
-    finally:
-        try:
-            stopped_statuses = supervisor.stop_services()
-            stopped = stopped_statuses[0] if stopped_statuses else None
-        finally:
-            result.events = state.read_events(limit=50)
-        if stopped is not None and not stopped.running:
-            result.add("pass", "runtime.stop", "service stopped cleanly")
+        self.observe(observe_s)
 
-
-def _scenario_health(
-    service_name: str,
-    registry: ServiceRegistry,
-    paths: ServicePaths,
-    result: ConformanceResult,
-    *,
-    timeout_s: float,
-) -> None:
-    state = StateStore(paths)
-    supervisor = ServiceSupervisor(registry, state, paths)
-    try:
-        try:
-            status = _start_and_observe(supervisor, service_name, timeout_s=timeout_s)
-        except Exception as exc:
-            result.add(
-                "fail",
-                "health.setup",
-                "service failed to start before health check",
-                error=str(exc),
-                error_type=type(exc).__name__,
-            )
+    def health(self) -> None:
+        status = self.start(
+            "health.setup", "service failed to start before health check"
+        )
+        if status is None:
             return
-        result.status = status.to_dict()
+        self.result.status = status.to_dict()
         if status.health == "healthy":
-            result.add("pass", "health.observed", "health check reported healthy")
+            self.result.add("pass", "health.observed", "health check reported healthy")
         elif status.health == "unknown":
-            result.add("fail", "health.observed", "health check did not run")
+            self.result.add("fail", "health.observed", "health check did not run")
         else:
-            result.add("fail", "health.observed", "health check reported unhealthy")
-        if status.ready:
-            result.add("pass", "readiness.observed", "service reported ready")
-        else:
-            result.add("fail", "readiness.observed", "service was not ready")
-    finally:
-        try:
-            supervisor.stop_services()
-        finally:
-            result.events = state.read_events(limit=50)
-            result.logs = supervisor.logs.read_lines(service_name, lines=20)
-
-
-def _scenario_crash(
-    service_name: str,
-    registry: ServiceRegistry,
-    paths: ServicePaths,
-    result: ConformanceResult,
-    *,
-    timeout_s: float,
-) -> None:
-    state = StateStore(paths)
-    supervisor = ServiceSupervisor(registry, state, paths)
-    service = registry.get(service_name)
-    try:
-        try:
-            status = _start_and_observe(supervisor, service_name, timeout_s=timeout_s)
-        except Exception as exc:
-            result.add(
-                "fail",
-                "crash.setup",
-                "service failed to start before crash scenario",
-                error=str(exc),
-                error_type=type(exc).__name__,
+            self.result.add(
+                "fail", "health.observed", "health check reported unhealthy"
             )
+        if status.ready:
+            self.result.add("pass", "readiness.observed", "service reported ready")
+        else:
+            self.result.add("fail", "readiness.observed", "service was not ready")
+
+    def crash(self) -> None:
+        status = self.start(
+            "crash.setup", "service failed to start before crash scenario"
+        )
+        if status is None:
             return
         if not status.running:
-            result.add("fail", "crash.setup", "service was not running before crash")
+            self.result.add(
+                "fail", "crash.setup", "service was not running before crash"
+            )
             return
-        managed = supervisor._managed.get(service_name)
-        if managed is None:
-            result.add("fail", "crash.setup", "service process was not tracked")
+        process = self.supervisor.process(self.service.name)
+        if process is None:
+            self.result.add("fail", "crash.setup", "service process was not tracked")
             return
-        supervisor._runtime.kill(managed.process)
-        deadline = time.monotonic() + timeout_s
+        process.kill()
+
+        deadline = time.monotonic() + self.timeout_s
         final = status
         while time.monotonic() < deadline:
-            supervisor.monitor_once()
-            final = supervisor.status_many([service_name])[0]
-            if service.restart_policy == "never" and not final.running:
+            self.supervisor.monitor_once()
+            final = self.supervisor.status_many([self.service.name])[0]
+            if self.service.restart_policy == "never" and not final.running:
                 break
             if final.running and final.restart_count > status.restart_count:
                 break
             time.sleep(0.1)
-        result.status = final.to_dict()
-        if service.restart_policy == "never":
+        self.result.status = final.to_dict()
+
+        if self.service.restart_policy == "never":
             if not final.running and final.restart_count == 0:
-                result.add(
+                self.result.add(
                     "pass",
                     "crash.restart_policy",
                     "service stayed stopped as restart_policy=never requires",
                 )
             else:
-                result.add(
+                self.result.add(
                     "fail",
                     "crash.restart_policy",
                     "service restarted despite restart_policy=never",
                 )
         elif final.running and final.restart_count > status.restart_count:
-            result.add(
+            self.result.add(
                 "pass",
                 "crash.restart_policy",
                 "service restarted after a crash",
                 restart_count=final.restart_count,
             )
         else:
-            result.add(
+            self.result.add(
                 "fail",
                 "crash.restart_policy",
                 "service did not restart after a crash before timeout",
-                restart_policy=service.restart_policy,
+                restart_policy=self.service.restart_policy,
             )
-    finally:
+
+    def start(self, check: str, message: str) -> ServiceStatus | None:
         try:
-            supervisor.stop_services()
-        finally:
-            result.events = state.read_events(limit=50)
-            result.logs = supervisor.logs.read_lines(service_name, lines=20)
-
-
-def _start_and_observe(
-    supervisor: ServiceSupervisor,
-    service_name: str,
-    *,
-    timeout_s: float,
-) -> ServiceStatus:
-    supervisor.start_services([service_name])
-    deadline = time.monotonic() + timeout_s
-    status = supervisor.status_many([service_name])[0]
-    while time.monotonic() < deadline:
-        supervisor.monitor_once()
-        status = supervisor.status_many([service_name])[0]
-        if status.running and status.health != "unknown":
+            self.supervisor.start_services([self.service.name])
+            deadline = time.monotonic() + self.timeout_s
+            status = self.supervisor.status_many([self.service.name])[0]
+            while time.monotonic() < deadline:
+                self.supervisor.monitor_once()
+                status = self.supervisor.status_many([self.service.name])[0]
+                if status.running and status.health != "unknown":
+                    return status
+                if not status.running and status.state != "backing-off":
+                    return status
+                time.sleep(0.1)
             return status
-        if not status.running and status.state != "backing-off":
-            return status
-        time.sleep(0.1)
-    return status
-
-
-def _check_status_endpoints(
-    status: ServiceStatus,
-    service: CondaService,
-    result: ConformanceResult,
-) -> None:
-    for endpoint in service.endpoints:
-        data = status.endpoints.get(endpoint.name)
-        if data is None:
-            result.add(
+        except Exception as exc:
+            self.result.add(
                 "fail",
-                "endpoint.resolved",
-                f"endpoint {endpoint.name!r} was not reported in status",
-                endpoint=endpoint.name,
+                check,
+                message,
+                error=str(exc),
+                error_type=type(exc).__name__,
             )
-            continue
-        if data.get("port") is None:
-            result.add(
-                "fail",
-                "endpoint.resolved",
-                f"endpoint {endpoint.name!r} has no resolved port",
-                endpoint=endpoint.name,
-            )
-            continue
-        result.add(
-            "pass",
-            "endpoint.resolved",
-            f"endpoint {endpoint.name!r} resolved",
-            endpoint=endpoint.name,
-            url=data.get("url"),
-        )
-        if _endpoint_reachable(data):
-            result.add(
+            return None
+
+    def observe(self, duration_s: float) -> None:
+        deadline = time.monotonic() + duration_s
+        while time.monotonic() < deadline:
+            self.supervisor.monitor_once()
+            time.sleep(0.1)
+
+    def check_endpoints(self, status: ServiceStatus) -> None:
+        for endpoint in self.service.endpoints:
+            data = status.endpoints.get(endpoint.name)
+            if data is None:
+                self.result.add(
+                    "fail",
+                    "endpoint.resolved",
+                    f"endpoint {endpoint.name!r} was not reported in status",
+                    endpoint=endpoint.name,
+                )
+                continue
+            if data.get("port") is None:
+                self.result.add(
+                    "fail",
+                    "endpoint.resolved",
+                    f"endpoint {endpoint.name!r} has no resolved port",
+                    endpoint=endpoint.name,
+                )
+                continue
+            self.result.add(
                 "pass",
-                "endpoint.reachable",
-                f"endpoint {endpoint.name!r} accepted a connection",
+                "endpoint.resolved",
+                f"endpoint {endpoint.name!r} resolved",
                 endpoint=endpoint.name,
                 url=data.get("url"),
             )
-        else:
-            result.add(
-                "fail",
-                "endpoint.reachable",
-                f"endpoint {endpoint.name!r} was not reachable",
-                endpoint=endpoint.name,
-                url=data.get("url"),
-            )
+            if self.endpoint_reachable(data):
+                self.result.add(
+                    "pass",
+                    "endpoint.reachable",
+                    f"endpoint {endpoint.name!r} accepted a connection",
+                    endpoint=endpoint.name,
+                    url=data.get("url"),
+                )
+            else:
+                self.result.add(
+                    "fail",
+                    "endpoint.reachable",
+                    f"endpoint {endpoint.name!r} was not reachable",
+                    endpoint=endpoint.name,
+                    url=data.get("url"),
+                )
 
-
-def _endpoint_reachable(endpoint: dict[str, object]) -> bool:
-    protocol = endpoint.get("protocol")
-    host = endpoint.get("host")
-    port = endpoint.get("port")
-    if not isinstance(host, str) or not isinstance(port, int):
+    def endpoint_reachable(self, endpoint: dict[str, object]) -> bool:
+        protocol = endpoint.get("protocol")
+        host = endpoint.get("host")
+        port = endpoint.get("port")
+        if not isinstance(host, str) or not isinstance(port, int):
+            return False
+        if protocol == "tcp":
+            try:
+                with socket.create_connection((host, port), timeout=1):
+                    return True
+            except OSError:
+                return False
+        if protocol == "http":
+            url = endpoint.get("url")
+            if not isinstance(url, str):
+                return False
+            try:
+                with urllib.request.urlopen(url, timeout=1) as response:
+                    return 200 <= response.status < 500
+            except OSError:
+                return False
         return False
-    if protocol == "tcp":
+
+
+@dataclass
+class ConformanceSuite:
+    """Run provider checks against a service registry."""
+
+    registry: ServiceRegistry = field(default_factory=ServiceRegistry.discover)
+
+    def validate(self, service_name: str) -> ConformanceResult:
+        service = self.registry.get(service_name)
+        result = ConformanceResult(service=service.name, command="validate")
+        ServiceValidation(service, self.registry, result).run()
+        return result
+
+    def run(
+        self,
+        service_name: str,
+        *,
+        duration_s: float = 3.0,
+        timeout_s: float = 5.0,
+        keep: bool = False,
+    ) -> ConformanceResult:
+        return self.exercise(
+            service_name,
+            command="run",
+            scenario="start-stop",
+            timeout_s=timeout_s,
+            observe_s=duration_s,
+            keep=keep,
+        )
+
+    def test(
+        self,
+        service_name: str,
+        *,
+        scenario: str = "start-stop",
+        timeout_s: float = 5.0,
+        keep: bool = False,
+    ) -> ConformanceResult:
+        if scenario not in SCENARIOS:
+            raise ValueError(f"Unknown conformance scenario: {scenario}")
+        return self.exercise(
+            service_name,
+            command="test",
+            scenario=scenario,
+            timeout_s=timeout_s,
+            keep=keep,
+        )
+
+    def report(
+        self,
+        service_name: str,
+        *,
+        timeout_s: float = 5.0,
+        keep: bool = False,
+    ) -> dict[str, object]:
+        service = self.registry.get(service_name)
+        results = [
+            self.validate(service.name),
+            self.run(
+                service.name,
+                duration_s=min(timeout_s, 3.0),
+                timeout_s=timeout_s,
+                keep=keep,
+            ),
+        ]
+        for scenario in ("health", "crash"):
+            results.append(
+                self.test(
+                    service.name,
+                    scenario=scenario,
+                    timeout_s=timeout_s,
+                    keep=keep,
+                )
+            )
+        return {
+            "ok": all(result.ok for result in results),
+            "service": service.name,
+            "command": "report",
+            "results": [result.to_dict() for result in results],
+        }
+
+    def exercise(
+        self,
+        service_name: str,
+        *,
+        command: str,
+        scenario: str,
+        timeout_s: float,
+        observe_s: float = 0.0,
+        keep: bool,
+    ) -> ConformanceResult:
+        service = self.registry.get(service_name)
+        with self.workspace(keep=keep) as (root, paths):
+            result = ConformanceResult(
+                service=service.name,
+                command=command,
+                scenario=scenario,
+                workspace=str(root),
+                kept=keep,
+            )
+            ServiceValidation(service, self.registry, result).run()
+            ConformanceScenario(
+                service,
+                self.registry,
+                paths,
+                result,
+                timeout_s,
+            ).run(observe_s=observe_s)
+            return result
+
+    @contextmanager
+    def workspace(self, *, keep: bool) -> Iterator[tuple[Path, ServicePaths]]:
+        root = Path(tempfile.mkdtemp(prefix="conda-broker-dev-"))
+        paths = ServicePaths(
+            runtime_dir=root / "runtime" / "conda" / "broker",
+            log_dir=root / "logs" / "conda" / "broker",
+        )
         try:
-            with socket.create_connection((host, port), timeout=1):
-                return True
-        except OSError:
-            return False
-    if protocol == "http":
-        url = endpoint.get("url")
-        if not isinstance(url, str):
-            return False
-        try:
-            with urllib.request.urlopen(url, timeout=1) as response:
-                return 200 <= response.status < 500
-        except OSError:
-            return False
-    return False
-
-
-def _observe(supervisor: ServiceSupervisor, duration_s: float) -> None:
-    deadline = time.monotonic() + duration_s
-    while time.monotonic() < deadline:
-        supervisor.monitor_once()
-        time.sleep(0.1)
-
-
-@contextmanager
-def _workspace(*, keep: bool) -> Iterator[tuple[Path, ServicePaths]]:
-    root = Path(tempfile.mkdtemp(prefix="conda-broker-dev-"))
-    paths = ServicePaths(
-        runtime_dir=root / "runtime" / "conda" / "broker",
-        log_dir=root / "logs" / "conda" / "broker",
-    )
-    try:
-        yield root, paths
-    finally:
-        if not keep:
-            shutil.rmtree(root, ignore_errors=True)
+            yield root, paths
+        finally:
+            if not keep:
+                shutil.rmtree(root, ignore_errors=True)

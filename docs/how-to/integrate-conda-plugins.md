@@ -75,6 +75,8 @@ The broker provider module can use broker imports directly because it is only
 loaded by broker discovery:
 
 ```python
+import sys
+
 from conda_broker.hookspec import hookimpl
 from conda_broker.models import CondaService, EndpointSpec, HealthCheck, ProcessSpec
 
@@ -90,7 +92,7 @@ def conda_broker_services():
         endpoints=(EndpointSpec(protocol="http", path="/health", port_env="PORT"),),
         health_check=HealthCheck(type="http", endpoint="default"),
         process=ProcessSpec(
-            argv=("python", "-m", "conda_my_plugin.helper"),
+            argv=(sys.executable, "-m", "conda_my_plugin.helper"),
             env={"PYTHONUNBUFFERED": "1"},
         ),
     )
@@ -111,12 +113,20 @@ def maybe_use_helper(request):
     if check.ready and check.endpoint and check.endpoint.url:
         return call_helper_api(check.endpoint.url, request)
 
-    service.emit_event(
-        "conda-my-plugin.fallback",
-        message=f"helper {check.reason or 'not ready'}; using inline path",
-    )
+    from conda_broker.exceptions import CondaBrokerError
+
+    try:
+        service.emit_event(
+            "conda-my-plugin.fallback",
+            message=f"helper {check.reason or 'not ready'}; using inline path",
+        )
+    except (OSError, CondaBrokerError):
+        pass
     return run_inline(request)
 ```
+
+Observability must not turn an optional fast path into a failed conda command
+when the runtime directory is unavailable.
 
 That pattern keeps the integration invisible when it works and boring when it
 does not. Users who never enabled the service still get the original plugin
@@ -355,6 +365,7 @@ Follow these rules for seamless integration:
 - Always keep the original inline path unless the plugin is explicitly a
   service-only plugin.
 - Emit broker events for observability, but do not fail conda commands if the
-  event cannot be delivered.
+  event cannot be delivered; catch `CondaBrokerError` and `OSError` around
+  optional event writes.
 - Prefer localhost HTTP or TCP endpoints with health checks over implicit
   files or inherited process state.

@@ -39,3 +39,9 @@ broker_log_dir: /tmp/conda-broker-logs
 ```
 
 Settings are loaded lazily with the conda plugin and do not start the broker.
+
+Configured paths expand `~` and are normalized to absolute paths without
+following a configured directory symlink. On POSIX, pre-existing runtime and
+log directories must be owned by the current user with mode `0700`. Fix an
+unsafe directory explicitly; the broker will not change permissions on a
+directory it did not create.

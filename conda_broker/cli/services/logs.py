@@ -2,26 +2,20 @@
 
 from __future__ import annotations
 
-import json
-
 from ...logs import LogManager
-from .common import console_or_default, emit_json, paths_from_args
+from ...paths import ServicePaths
+from .common import BrokerConsole
 
 
 def execute_logs(args, *, console=None) -> int:
-    logs = LogManager(paths_from_args(args))
-    resolved_console = console_or_default(console)
+    logs = LogManager(ServicePaths.resolve(args.runtime_dir, args.log_dir))
+    output = BrokerConsole(console)
     if args.follow:
         for line in logs.follow(args.service):
             if args.json:
-                print(
-                    json.dumps(
-                        {"service": args.service, "line": line},
-                        sort_keys=True,
-                    )
-                )
+                output.json_line({"service": args.service, "line": line})
             else:
-                resolved_console.print(line)
+                output.line(line)
         return 0
 
     lines = logs.read_lines(
@@ -30,8 +24,8 @@ def execute_logs(args, *, console=None) -> int:
         include_previous=args.previous,
     )
     if args.json:
-        emit_json({"service": args.service, "lines": lines}, console=console)
+        output.json({"service": args.service, "lines": lines})
     else:
         for line in lines:
-            resolved_console.print(line)
+            output.line(line)
     return 0

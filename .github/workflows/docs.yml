@@ -37,6 +37,8 @@ jobs:
       - uses: prefix-dev/setup-pixi@5185adfbffb4bd703da3010310260805d89ebb11 # v0.9.6
         with:
           environments: docs
+      - name: Check demos
+        run: pixi run -e docs demo-check
       - name: Build docs
         run: pixi run -e docs docs
       - name: Upload artifact

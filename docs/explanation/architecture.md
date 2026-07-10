@@ -11,6 +11,13 @@
 5. `ServiceSupervisor` resolves endpoints, starts, stops, observes,
    restarts, and reports child processes.
 
+Application behavior belongs to those objects rather than module-level helper
+collections. `BrokerLease` owns single-instance files and lock lifetime,
+`BrokerRequest` owns RPC authentication and normalization, `ManagedProcess`
+owns one child lifecycle, and `BrokerConsole` owns all Rich and JSON rendering.
+The remaining module-level functions are adapters required by conda hooks,
+argparse command dispatch, and Python entry points.
+
 ```{mermaid}
 flowchart LR
     User["User CLI"] --> CLI["cb / conda broker"]
@@ -25,10 +32,15 @@ flowchart LR
     Broker --> Events["events.jsonl"]
 ```
 
-The broker does not start during arbitrary conda invocations. Query methods
-can read state and ask a running broker for status, but startup is reserved
-for explicit commands and explicit `Broker` API calls.
+The broker does not start during arbitrary conda invocations. Lightweight
+`Service` queries only ask a running broker and return immediately when it is
+absent. Explicit `Broker.status()`, `list_services()`, enable, and disable
+operations may discover providers offline because those operations need the
+catalog. Startup is reserved for explicit commands and explicit `Broker` API
+calls.
 
 Endpoint resolution happens immediately before process launch. Static ports
 are reported as-is. Dynamic endpoints get a broker-assigned local port and
-environment variables that the child process can read before binding.
+environment variables that the child process can read before binding. The
+broker reserves all dynamic ports while composing one service launch, then
+releases them immediately before creating the child.

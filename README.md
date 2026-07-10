@@ -14,10 +14,12 @@ It provides:
 
 ## Provider API
 
-Broker providers expose specs through the `conda_broker` pluggy project,
+Broker providers expose services through the `conda_broker` pluggy project,
 not through conda's own hook API:
 
 ```python
+import sys
+
 from conda_broker.hookspec import hookimpl
 from conda_broker.models import CondaService, ProcessSpec
 
@@ -28,7 +30,9 @@ def conda_broker_services():
         name="package-cache",
         summary="Local conda package metadata cache",
         source="conda-package-cache",
-        process=ProcessSpec(argv=("python", "-m", "conda_package_cache", "--serve")),
+        process=ProcessSpec(
+            argv=(sys.executable, "-m", "conda_package_cache", "--serve")
+        ),
     )
 ```
 
@@ -53,8 +57,8 @@ if endpoint := Broker.current().service("package-cache").endpoint(ready=True):
 ```bash
 pixi install
 pixi run cb status
-pixi run -e test pytest
-pixi run ruff check
-pixi run ruff format --check
-pixi run ty check
+pixi run -e test test
+pixi run -e dev check
+pixi run -e dev demo-check
+pixi run -e docs docs
 ```

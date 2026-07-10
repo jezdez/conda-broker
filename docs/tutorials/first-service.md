@@ -6,6 +6,8 @@ Python process.
 ## Create the Provider Module
 
 ```python
+import sys
+
 from conda_broker.hookspec import hookimpl
 from conda_broker.models import CondaService, ProcessSpec
 
@@ -18,7 +20,7 @@ def conda_broker_services():
         source="example-provider",
         process=ProcessSpec(
             argv=(
-                "python",
+                sys.executable,
                 "-c",
                 "import time; print('ready', flush=True); time.sleep(3600)",
             ),
