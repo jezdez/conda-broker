@@ -108,9 +108,7 @@ def test_full_cli_broker_lifecycle(
         with pytest.raises(UnknownServiceError):
             broker.status("missing")
 
-        _wait_until(
-            lambda: service_paths.log_dir.joinpath("integration-heartbeat.log").exists()
-        )
+        _wait_until(lambda: _service_has_logged(service_paths))
         logs = _run_cli(
             service_paths,
             "logs",
