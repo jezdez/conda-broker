@@ -12,6 +12,20 @@ It provides:
 - a lightweight `Broker` API for other plugins to check service state without
   starting the broker
 
+## Install
+
+Install `conda-broker` from PyPI into the environment that provides the
+`conda` executable:
+
+```bash
+python -m pip install conda-broker
+conda broker --help
+```
+
+See the [documentation](https://jezdez.github.io/conda-broker/) for a
+quickstart, tutorials, task-focused guides, API and CLI reference, and
+architecture explanations.
+
 ## Provider API
 
 Broker providers expose services through the `conda_broker` pluggy project,

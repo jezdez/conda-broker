@@ -14,18 +14,12 @@ need to inspect and control.
 
 ## Install
 
-`conda-broker` is currently developed from this repository:
+Install `conda-broker` from PyPI into the environment that provides the
+`conda` executable:
 
 ```bash
-pixi install
-pixi run cb status
-```
-
-Once a conda package is published, install it from the chosen channel, for
-example:
-
-```bash
-conda install -c conda-forge conda-broker
+python -m pip install conda-broker
+conda broker --help
 ```
 
 ## Quick Use

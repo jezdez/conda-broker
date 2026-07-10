@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from ._version import __version__
 from .api import (
     Broker,
     BrokerContext,
@@ -22,5 +23,3 @@ __all__ = [
     "StatusSnapshot",
     "__version__",
 ]
-
-__version__ = "0.1.0"
