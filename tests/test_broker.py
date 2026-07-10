@@ -146,11 +146,11 @@ def test_unheld_stale_lock_is_recovered(service_paths: ServicePaths) -> None:
         lease.acquire()
 
         assert service_paths.lock_file.exists()
-        assert lease.instance_id in service_paths.lock_file.read_text(encoding="utf-8")
     finally:
         lease.release()
 
     assert service_paths.lock_file.exists()
+    assert lease.instance_id in service_paths.lock_file.read_text(encoding="utf-8")
 
 
 def test_held_lock_prevents_second_broker(service_paths: ServicePaths) -> None:

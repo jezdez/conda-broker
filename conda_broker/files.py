@@ -45,8 +45,8 @@ class FileLock:
             pass
         try:
             if os.name == "nt":
-                stream.seek(0)
-                if stream.read(1) == "":
+                stream.seek(0, os.SEEK_END)
+                if stream.tell() == 0:
                     stream.write("\0")
                     stream.flush()
                 stream.seek(0)
