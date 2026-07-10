@@ -14,11 +14,19 @@ need to inspect and control.
 
 ## Install
 
-Install `conda-broker` from PyPI into the environment that provides the
-`conda` executable:
+Add `conda-broker` as a PyPI dependency with Pixi:
 
 ```bash
-python -m pip install conda-broker
+pixi add --pypi conda-broker
+pixi run cb --help
+```
+
+Or, in a conda installation, use `conda-pypi` from the base environment:
+
+```bash
+conda activate base
+conda install conda-pypi
+conda pypi install conda-broker
 conda broker --help
 ```
 

@@ -217,7 +217,7 @@ def test_broker_sigterm_stops_managed_processes(
 
         _wait_until(lambda: not broker.running())
         _wait_until(lambda: not psutil.pid_exists(status.pid))
-        assert service_paths.lock_available(service_paths.lock_file) is True
+        _wait_until(lambda: service_paths.lock_available(service_paths.lock_file))
         assert StateStore(service_paths).managed_processes() == {}
     finally:
         if broker.running():
