@@ -496,6 +496,29 @@ def test_start_services_requires_a_name(service_paths: ServicePaths) -> None:
         Broker.current(service_paths).start_services([])
 
 
+def test_wait_uses_service_timeout_for_ipc_call(
+    monkeypatch,
+    service_paths: ServicePaths,
+) -> None:
+    calls: list[tuple[str, float]] = []
+
+    def call(
+        self: IpcClient,
+        method: str,
+        params=None,
+        *,
+        timeout: float = 2.0,
+    ) -> dict[str, list[object]]:
+        calls.append((method, timeout))
+        return {"services": []}
+
+    monkeypatch.setattr(IpcClient, "call", call)
+
+    Broker.current(service_paths).wait("api", timeout_s=30.0)
+
+    assert calls == [("wait_service", 31.0)]
+
+
 @pytest.mark.parametrize("timeout_s", [0, -1, float("nan"), float("inf")])
 def test_broker_start_rejects_invalid_timeout_without_side_effects(
     service_paths: ServicePaths,

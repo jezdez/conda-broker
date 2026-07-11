@@ -391,6 +391,7 @@ class Broker:
         result = self.ipc.call(
             "wait_service",
             {"service": service, "timeout_s": timeout_s},
+            timeout=timeout_s + 1.0,
         )
         return StatusSnapshot.from_dict(result)
 
